@@ -182,16 +182,18 @@ class BaseImporter(ABC):
 
     def _attach_files(
         self,
-        resource_id: int | str,
+        entry_id: int | str,
         folder: str | Path,
         recursive: bool = True,
         chunk_size: int = 10,
     ) -> None:
-        res_id = str(resource_id)
-        if not res_id.isdigit():
-            raise ValueError(f"Invalid resource ID for upload: {resource_id!r}")
+        entry_id = str(entry_id)
 
-        logger.info("Uploading files for resource %s from %s", res_id, folder)
+        if not entry_id.isdigit():
+            raise ValueError(f"Invalid elabFTW entry ID for upload:"
+                             f" {entry_id!r}")
+
+        logger.info("Uploading files for elabFTW entry ID %s from %s", entry_id, folder)
         files = self._iter_files_in_dir(folder, recursive=recursive)
         if not files:
             logger.warning("No files to upload from: %s", folder)
@@ -210,11 +212,11 @@ class BaseImporter(ABC):
                     payload.append(("files[]", (fp.name, fh, _mime_or_default(fp))))
                 try:
                     resp = self.endpoint.post(
-                        endpoint_id=res_id, sub_endpoint_name="uploads", files=payload
+                        endpoint_id=entry_id, sub_endpoint_name="uploads", files=payload
                     )
                     resp.raise_for_status()
                     logger.debug(
-                        "Uploaded batch of %d files for resource %s", len(batch), res_id
+                        "Uploaded batch of %d files for resource %s", len(batch), entry_id
                     )
                     return True
                 except Exception as exc:
@@ -248,10 +250,10 @@ class BaseImporter(ABC):
         errors: list[str] = []
         for fp in files:
             try:
-                logger.debug("Uploading file %s to resource %s", fp, res_id)
+                logger.debug("Uploading file %s to resource %s", fp, entry_id)
                 with fp.open("rb") as fh:
                     resp = self.endpoint.post(
-                        endpoint_id=res_id,
+                        endpoint_id=entry_id,
                         sub_endpoint_name="uploads",
                         files=[("files[]", (fp.name, fh, _mime_or_default(fp)))],
                     )
@@ -261,14 +263,14 @@ class BaseImporter(ABC):
                 except Exception:
                     with fp.open("rb") as fh2:
                         resp2 = self.endpoint.post(
-                            endpoint_id=res_id,
+                            endpoint_id=entry_id,
                             sub_endpoint_name="uploads",
                             files={"file": (fp.name, fh2, _mime_or_default(fp))},
                         )
                     resp2.raise_for_status()
             except Exception as exc:
                 logger.error(
-                    "Failed to upload file %s to resource %s: %s", fp, res_id, exc
+                    "Failed to upload file %s to resource %s: %s", fp, entry_id, exc
                 )
                 errors.append(f"{fp}: {exc}")
 

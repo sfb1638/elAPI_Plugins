@@ -136,7 +136,8 @@ def index() -> str | WerkzeugResponse:
             try:
                 if import_target == "resources":
                     importer = ImporterFactory.get_importer(
-                        "resources", csv_path=full_path, template_id=cid
+                        "resources", csv_path=full_path, template_id=cid,
+                        category_id=cid
                     )
                     ids = importer.create_all_from_csv()
                     count = len(ids)

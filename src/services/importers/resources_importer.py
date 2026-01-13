@@ -43,6 +43,7 @@ class ResourcesImporter(BaseImporter):
         csv_path: Path | str,
         files_base_dir: str | Path | None = None,
         template_id: int | str | None = None,
+        category_id: int | str | None = None,
     ) -> None:
         setup_logging()
         self._endpoint: elapi.api.FixedEndpoint = get_fixed("resources")
@@ -57,8 +58,11 @@ class ResourcesImporter(BaseImporter):
         )
         self._new_resources_counter: int = 0
         self._patched_resources_counter: int = 0
-        logger.info("Loaded resources CSV with %d rows", len(self._resources_df))
-
+        self._default_category: str | None = self.normalize_id(category_id)
+        if self._default_category is not None:
+            self.validate_category_id(self._default_category)
+        logger.info("Loaded resources   CSV with %d rows",
+                    len(self._resources_df))
     @property
     def basic_df(self) -> pd.DataFrame:
         return self._resources_df
@@ -277,15 +281,6 @@ class ResourcesImporter(BaseImporter):
         if effective_template is not None:
             data["template"] = effective_template
 
-        if title := self._get_title(row):
-            data["title"] = title
-
-        if tags := self.get_tags(row):
-            data["tags"] = tags
-
-        if category_id := self.get_category_id(row):
-            data["category"] = category_id
-
         body_col = self._find_col_like("body")
 
         if body_col and body_col in row:
@@ -311,6 +306,46 @@ class ResourcesImporter(BaseImporter):
 
         resource_id = str(self.get_elab_id(response))
         logger.info("Created resource %s", resource_id)
+        category_id = self.get_category_id(row) or self._default_category
+        if category_id:
+            patch_resp = None
+            try:
+                patch_resp = self.endpoint.patch(
+                    endpoint_id=resource_id, data={"category": category_id}
+                )
+                patch_resp.raise_for_status()
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Failed to patch category for resource {resource_id}: "
+                    f"{getattr(patch_resp, 'status_code', '?')} "
+                    f"{getattr(patch_resp, 'text', '')}"
+                ) from exc
+        if tags := self.get_tags(row):
+            patch_resp = None
+            try:
+                patch_resp = self.endpoint.patch(
+                    endpoint_id=resource_id, data={"tags": tags}
+                )
+                patch_resp.raise_for_status()
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Failed to patch tags for resource {resource_id}: "
+                    f"{getattr(patch_resp, 'status_code', '?')} "
+                    f"{getattr(patch_resp, 'text', '')}"
+                ) from exc
+        if title := self._get_title(row):
+            patch_resp = None
+            try:
+                patch_resp = self.endpoint.patch(
+                    endpoint_id=resource_id, data={"title": title}
+                )
+                patch_resp.raise_for_status()
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Failed to patch title for resource {resource_id}: "
+                    f"{getattr(patch_resp, 'status_code', '?')} "
+                    f"{getattr(patch_resp, 'text', '')}"
+                ) from exc
 
         path_col = self._find_path_col()
         if path_col and path_col in row:
