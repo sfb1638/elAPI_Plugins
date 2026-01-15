@@ -1,0 +1,7 @@
+{
+  "fetch_pages" : {
+    "page_size" : 15,
+    "start_offset" : 0,
+    "max_retries" : 3
+  }
+}
