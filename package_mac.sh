@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Build a self-contained macOS .app + DMG for ELAPI GUI.
-# Includes elapi/VERSION so elapi can determine its version at runtime.
+# Includes elapi/VERSION and elapi/api/_supported_versions so elapi can determine
+# its version and supported endpoints at runtime.
+
 set -euo pipefail
 
 # Detect OS architecture (x86_64 or arm64)
@@ -37,20 +39,44 @@ if [ "$PY_ARCH" != "$OS_ARCH" ]; then
   exit 1
 fi
 
-# Find elapi’s VERSION file inside the venv
+# Find elapi’s package root + data files inside the venv
 ELAPI_VERSION_FILE=$(python - <<'PY'
 import importlib.util, pathlib
 spec = importlib.util.find_spec('elapi')
 if spec is None:
     raise SystemExit("elapi not found in this environment")
-print((pathlib.Path(spec.origin).parent / 'VERSION').resolve())
+root = pathlib.Path(spec.origin).parent
+print((root / 'VERSION').resolve())
 PY
 )
 
+ELAPI_SUPPORTED_VERSIONS_DIR=$(python - <<'PY'
+import importlib.util, pathlib
+spec = importlib.util.find_spec('elapi')
+if spec is None:
+    raise SystemExit("elapi not found in this environment")
+root = pathlib.Path(spec.origin).parent
+d = root / "api" / "_supported_versions"
+print(d.resolve())
+PY
+)
+
+if [ ! -f "$ELAPI_VERSION_FILE" ]; then
+  echo "ERROR: elapi VERSION file not found: $ELAPI_VERSION_FILE" >&2
+  exit 1
+fi
+
+if [ ! -d "$ELAPI_SUPPORTED_VERSIONS_DIR" ]; then
+  echo "ERROR: elapi supported versions dir not found: $ELAPI_SUPPORTED_VERSIONS_DIR" >&2
+  exit 1
+fi
+
 # Assemble data files
+# NOTE: On macOS, PyInstaller expects --add-data 'SRC:DEST'
 DATA_ARGS="--add-data gui/templates:templates"
 [ -d "gui/static" ] && DATA_ARGS="$DATA_ARGS --add-data gui/static:static"
 DATA_ARGS="$DATA_ARGS --add-data $ELAPI_VERSION_FILE:elapi"
+DATA_ARGS="$DATA_ARGS --add-data ${ELAPI_SUPPORTED_VERSIONS_DIR}:elapi/api/_supported_versions"
 [ -d "config" ] && DATA_ARGS="$DATA_ARGS --add-data config:config"
 
 # Optional icon
@@ -70,6 +96,16 @@ echo "✅ App built: dist/${APP_NAME}.app"
 if command -v codesign >/dev/null 2>&1; then
   codesign --deep --force --sign - "dist/${APP_NAME}.app" || true
 fi
+
+# Sanity check: ensure supported versions JSONs are inside the bundle
+if [ ! -d "dist/${APP_NAME}.app/Contents/Frameworks/elapi/api/_supported_versions" ]; then
+  echo "ERROR: Bundle missing elapi/api/_supported_versions inside .app" >&2
+  echo "Expected: dist/${APP_NAME}.app/Contents/Frameworks/elapi/api/_supported_versions" >&2
+  exit 1
+fi
+
+echo "🔎 Bundled supported versions:"
+ls -la "dist/${APP_NAME}.app/Contents/Frameworks/elapi/api/_supported_versions" || true
 
 cd dist
 DMG_NAME="${APP_NAME}-macOS.dmg"
