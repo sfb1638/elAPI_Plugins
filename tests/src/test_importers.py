@@ -231,3 +231,48 @@ def test_resources_importer_coerce_for_field_select_multi() -> None:
 def test_resources_importer_split_multi_trims_and_splits() -> None:
     parts = ResourcesImporter._split_multi(" one ; two,three ")
     assert parts == ["one", "two", "three"]
+
+
+def test_resources_importer_link_columns(monkeypatch: pytest.MonkeyPatch) -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "Experiments Links": "1, 2.0",
+                "Resources Link": "5,5,6",
+                "title": "linked",
+            }
+        ]
+    )
+    importer = object.__new__(ResourcesImporter)
+    importer._resources_df = df
+    importer._cols_canon = {
+        "experimentslinks": "Experiments Links",
+        "resourceslink": "Resources Link",
+        "title": "title",
+    }
+    importer._KNOWN_POST_FIELDS = set()  # ensure link columns treated as extras
+    importer._endpoint = DummyEndpoint()
+    importer._template_id = None
+    importer._files_base_dir = None
+    importer._category_col = None
+    importer._new_resources_counter = 0
+    importer._patched_resources_counter = 0
+
+    monkeypatch.setattr(importer, "get_existing_json", lambda _elab_id: {})
+
+    posted: list[tuple[str, list[int]]] = []
+
+    def fake_post_links(rid: str, ops: list[tuple[str, list[int]]]) -> None:
+        posted.extend(ops)
+
+    importer._post_links = fake_post_links  # type: ignore[attr-defined]
+
+    importer.post_extra_fields_from_row(
+        resource_id="1",
+        row=df.iloc[0],
+        known_columns={"title"},
+    )
+
+    assert posted == [("experiments_links", [1, 2]), ("items_links", [5, 6])]
+    # No metadata patch should be sent when only links are present
+    assert importer._endpoint.last_patch is None
