@@ -37,6 +37,14 @@ class ResourcesImporter(BaseImporter):
     """Importer for the ElabFTW ``resources`` endpoint."""
 
     _KNOWN_POST_FIELDS: set[str] = set(CONFIG["known_post_fields"])
+    _LINK_COLUMN_MAP: dict[str, str] = {
+        # CSV column (canonicalized) -> payload field name returned by API
+        canonicalize_field("experiments links"): "experiments_links",
+        canonicalize_field("experiment link"): "experiments_links",
+        canonicalize_field("resources link"): "items_links",
+        canonicalize_field("resources links"): "items_links",
+        canonicalize_field("items links"): "items_links",
+    }
 
     def __init__(
         self,
@@ -141,6 +149,54 @@ class ResourcesImporter(BaseImporter):
         return extras
 
     @staticmethod
+    def _parse_link_ids(raw: Any) -> list[int]:
+        """Return a list of numeric link ids parsed from a CSV cell."""
+        if raw is None or (isinstance(raw, float) and pd.isna(raw)):
+            return []
+
+        text = str(raw).replace("\u00a0", " ").strip()
+        if not text:
+            return []
+
+        ids: list[int] = []
+        for chunk in ResourcesImporter._split_multi(text):
+            # Allow numbers that may have been read as floats like '123.0'
+            cleaned = chunk.strip()
+            try:
+                num = int(float(cleaned))
+            except Exception:
+                continue
+            if num < 0:
+                continue
+            if num not in ids:
+                ids.append(num)
+        return ids
+
+    def _post_links(self, resource_id: str, link_ops: list[tuple[str, list[int]]]) -> None:
+        """Create links via sub-endpoints (experiments_links/items_links)."""
+        for endpoint_name, ids in link_ops:
+            sub_endpoint = endpoint_name
+            for link_id in ids:
+                try:
+                    resp = self.endpoint.post(
+                        endpoint_id=resource_id,
+                        sub_endpoint_name=sub_endpoint,
+                        sub_endpoint_id=link_id,
+                    )
+                    resp.raise_for_status()
+                    logger.debug(
+                        "Linked resource %s via %s -> %s", resource_id, sub_endpoint, link_id
+                    )
+                except Exception as exc:
+                    logger.error(
+                        "Failed to link resource %s via %s to %s: %s",
+                        resource_id,
+                        sub_endpoint,
+                        link_id,
+                        exc,
+                    )
+
+    @staticmethod
     def _split_multi(raw: str) -> list[str]:
         raw = raw.replace("\u00a0", " ")
         parts: list[str] = []
@@ -217,6 +273,23 @@ class ResourcesImporter(BaseImporter):
         csv_extras = self._collect_csv_extra_fields(row, known_columns=known_columns)
 
         changed: dict[str, Any] = {}
+
+        link_ops: list[tuple[str, list[int]]] = []
+
+        # Handle link columns that should target specific API link sub-endpoints
+        for ckey, (orig_col, raw_val) in list(csv_extras.items()):
+            if ckey not in self._LINK_COLUMN_MAP:
+                continue
+
+            target_key = self._LINK_COLUMN_MAP[ckey]
+            link_ids = self._parse_link_ids(raw_val)
+            if not link_ids:
+                # leave as normal extra if no numeric ids were found
+                continue
+
+            del csv_extras[ckey]  # avoid double-handling as generic extra
+            link_ops.append((target_key, link_ids))
+
         for ckey, (orig_col, raw_val) in csv_extras.items():
             # Updates resource with coerced value when definition exists
             if ckey in defs_by_canon:
@@ -245,9 +318,16 @@ class ResourcesImporter(BaseImporter):
             elab_extra_fields[new_key] = {"value": raw_val}
             changed[new_key] = raw_val
 
+        # Create links through dedicated sub-endpoints
+        self._post_links(rid, link_ops)
+
         if not changed:
-            logger.info("No matching extra fields to upload for resource %s.", rid)
+            if link_ops:
+                logger.info("Only links to create for resource %s; skipping metadata patch.", rid)
+            else:
+                logger.info("No matching extra fields to upload for resource %s.", rid)
             return
+
         logger.debug(
             "Patching extra fields for resource %s: %s", rid, list(changed.keys())
         )
@@ -255,12 +335,23 @@ class ResourcesImporter(BaseImporter):
         metadata_str = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
         payload = {"metadata": metadata_str}
 
+        if not payload:
+            logger.info("No extra fields changed for resource %s.", rid)
+            return
+
         resp = self.endpoint.patch(endpoint_id=rid, data=payload)
 
         try:
             resp.raise_for_status()
-
         except Exception as exc:
+            # Log server feedback to help debug invalid payloads (e.g., link fields)
+            logger.error(
+                "Failed to patch extra fields for resource %s: %s %s | payload keys=%s",
+                rid,
+                getattr(resp, "status_code", "?"),
+                getattr(resp, "text", ""),
+                list(payload.keys()),
+            )
             raise RuntimeError(
                 f"Failed to patch extra fields for resource {rid}: "
                 f"{getattr(resp, 'status_code', '?')} {getattr(resp, 'text', '')}"
