@@ -355,7 +355,30 @@ class BaseImporter(ABC):
 
         return str(title_val).strip()
 
-    def get_tags(self, row: pd.Series) -> list[str]:
+    def replace_tags (self, resource_id: int | str, tags: list[str]) -> None:
+        rid = str(resource_id)
+        tags = [t.strip() for t in tags if t and str(t).strip()]
+
+        # Optional: clear existing tags first (replace semantics)
+        # If you prefer "merge semantics", remove this delete.
+        try:
+            self.endpoint.delete(endpoint_id=rid, sub_endpoint_name="tags")
+        except Exception:
+            # Some setups/permissions might not allow delete; you can ignore or log
+            pass
+
+        for t in tags:
+            # eLabFTW tags are created via POST /{entity_type}/{id}/tags :contentReference[oaicite:1]{index=1}
+            resp = self.endpoint.post(
+                endpoint_id=rid,
+                sub_endpoint_name="tags",
+                data={
+                    "tag": t
+                    },  # common request body shape for tag creation
+                )
+            resp.raise_for_status()
+
+    def _get_tags(self, row: pd.Series) -> list[str]:
         """Parse tags column into list; supports sequences or delimited strings."""
         if row is None:
             return []
@@ -365,20 +388,37 @@ class BaseImporter(ABC):
         val = row[tags_col]
         if pd.isna(val):
             return []
+
         if isinstance(val, (list, tuple, set)):
             return [str(x).strip() for x in val if str(x).strip()]
-        if isinstance(val, str):
+        elif isinstance(val, str):
             for delim in [";", ",", "|"]:
                 if delim in val:
                     parts = val.split(delim)
                     break
             else:
                 parts = [val]
-            return [p.strip() for p in parts if p.strip()]
-        s = str(val).strip()
-        if not s or s.lower() in {"nan", "none", "null"}:
-            return []
-        return [s]
+            tags=[p.strip() for p in parts if p.strip()]
+        else:
+            s = str(val).strip()
+            if not s or s.lower() in {"nan", "none", "null"}:
+                return []
+            tags = [s]
+
+        seen = set()
+        out =[]
+
+        for tag in tags:
+            if tag not in seen:
+                seen.add(tag)
+                out.append(tag)
+
+        return out
+
+
+
+    def _get_tags_str(self, row: pd.Series) -> str | None:
+        return "|".join(self._get_tags(row))
 
     def get_existing_json(self, elab_id: str) -> dict[str, Any]:
         """Fetch existing record JSON for id; return empty dict on failure."""

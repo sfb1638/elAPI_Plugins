@@ -411,7 +411,10 @@ class ResourcesImporter(BaseImporter):
                     f"{getattr(patch_resp, 'status_code', '?')} "
                     f"{getattr(patch_resp, 'text', '')}"
                 ) from exc
-        if tags := self.get_tags(row):
+
+        tags_list = self._get_tags(row)
+        if tags_list:
+            self.replace_tags(resource_id, tags_list)
             patch_resp = None
             try:
                 patch_resp = self.endpoint.patch(
@@ -461,7 +464,7 @@ class ResourcesImporter(BaseImporter):
     def patch_existing(self, resource_id: str, category: str, row: pd.Series) -> Any:
         payload: dict[str, Any] = {"category": category}
 
-        if tags := self.get_tags(row):
+        if tags := self._get_tags_str(row):
             payload["tags"] = tags
 
         if title := self._get_title(row):
