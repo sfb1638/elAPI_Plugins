@@ -92,11 +92,11 @@ def index() -> str | WerkzeugResponse:
             ),
         )
     )
-
     categories = sorted(categories, key=lambda c: c.get("title", "").lower())
 
     if request.method == "POST":
-        action = request.form.get("export_type")
+        action = (request.form.get("export_type") or "").strip().lower()
+
         if action == "resources":
             cid = int(request.form["category"])
             fname = request.form.get("filename") or None
@@ -104,40 +104,46 @@ def index() -> str | WerkzeugResponse:
             path = exporter.xlsx_export(fname)
             return send_file(path, as_attachment=True)  # type: ignore[arg-type]
 
-        elif action == "experiments":
+        if action == "experiments":
             fname = request.form.get("exp_filename") or None
             exporter = ExporterFactory.get_exporter("experiments")
             path = exporter.xlsx_export(fname)
             return send_file(path, as_attachment=True)  # type: ignore[arg-type]
 
-        elif action == "imports":
+        if action == "imports":
             cid = int(request.form["category"])
-            import_path = request.form.get("import_path", "").strip()
-            import_target = (
-                (request.form.get("import_target") or "resources").strip().lower()
-            )
 
+            update_existing = (request.form.get("update_existing") or "no").strip().lower() == "yes"
+            logger.info("Update existing requested? %s", update_existing)
+
+            # (Optional) support "path import" in future
+            import_path = (request.form.get("import_path") or "").strip()
+            import_target = (request.form.get("import_target") or "resources").strip().lower()
+
+            # Decide source path
             if import_path:
-                full_path = os.path.abspath(import_path)
-                if not os.path.isfile(full_path):
-                    flash(f"No file found at {full_path}", "error")
+                source = os.path.abspath(import_path)
+                if not os.path.isfile(source):
+                    flash(f"No file found at {source}", "error")
                     return redirect(url_for("index"))
-                source = full_path
             else:
                 uploaded = request.files.get("import_file")
                 if not uploaded or not uploaded.filename:
                     flash("No file selected and no path provided", "error")
                     return redirect(url_for("index"))
+
                 filename = secure_filename(uploaded.filename)
-                full_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-                uploaded.save(full_path)
-                source = full_path
+                source = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+                uploaded.save(source)
 
             try:
                 if import_target == "resources":
                     importer = ImporterFactory.get_importer(
-                        "resources", csv_path=full_path, template_id=cid,
-                        category_id=cid
+                        "resources",
+                        csv_path=source,
+                        template_id=cid,
+                        category_id=cid,
+                        update_existing=update_existing,
                     )
                     ids = importer.create_all_from_csv()
                     count = len(ids)
@@ -145,7 +151,16 @@ def index() -> str | WerkzeugResponse:
                     flash(f"Unknown import target: {import_target}", "error")
                     return redirect(url_for("index"))
 
-                flash(f"Imported {count} {import_target} from {source}", "success")
+                if update_existing:
+                    skipped = getattr(importer, "skipped_count", 0)
+                    flash(
+                        f"Updated {count} existing {import_target} from {source}"
+                        + (f"; skipped {skipped} invalid IDs" if skipped else ""),
+                        "success",
+                    )
+                else:
+                    flash(f"Imported {count} {import_target} from {source}", "success")
+
             except Exception as e:
                 flash(f"Import failed: {e}", "error")
 
