@@ -21,7 +21,6 @@ LOG_LEVEL = "DEBUG"
 setup_logging(level=LOG_LEVEL, force=True)
 logger = logging.getLogger(__name__)
 
-# Extend PATH for Finder-launched app so external tools can be found
 if getattr(sys, "frozen", False):
     os.environ["PATH"] = os.pathsep.join(
         [
@@ -42,12 +41,10 @@ def resource_path(rel_path: str) -> str:
     return os.path.join(base_path, rel_path)
 
 
-# Ensure local modules can be imported
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 
-# Configure Flask to look up templates and static files in the bundled locations
 app = Flask(
     __name__,
     template_folder=resource_path("templates"),
@@ -55,7 +52,6 @@ app = Flask(
 )
 app.secret_key = os.urandom(24)
 
-# Use a writable directory for uploads (outside the application bundle)
 APP_NAME = "elAPI_Plugins"
 UPLOAD_DIR = os.path.join(tempfile.gettempdir(), APP_NAME, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -178,7 +174,6 @@ def shutdown() -> tuple[str, int]:
 
 
 def _open_browser() -> None:
-    # Open the web interface in the default browser after the server starts
     time.sleep(1)
     webbrowser.open("http://127.0.0.1:1991")
 
