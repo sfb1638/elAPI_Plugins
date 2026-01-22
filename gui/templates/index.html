@@ -3,12 +3,11 @@
 <head>
     <meta charset="utf-8"/>
     <title>Export Resources</title>
-    <link
-            href="https://fonts.googleapis.com/css2?family=Roboto&display=swap"
-            rel="stylesheet"
-    />
+
+    <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet"/>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
 </head>
+
 <body>
 <div class="container">
     <div style="text-align: center; margin-bottom: 20px">
@@ -18,6 +17,7 @@
                 width="100"
         />
     </div>
+
     <h1>Manage eLabFTW Data</h1>
 
     {% if update_info and update_info.is_update_available %}
@@ -38,18 +38,18 @@
 
     <!-- Tabs -->
     <div class="tabs">
-        <div id="btn-export" class="tab-button active">Export</div>
-        <div id="btn-import" class="tab-button">Import</div>
+        <div id="btn-export" class="tab-button active" role="button" tabindex="0">Export</div>
+        <div id="btn-import" class="tab-button" role="button" tabindex="0">Import</div>
     </div>
 
     <div id="export-options" class="tab-content">
-        <div id="tab-export-res" class="sub-tab-button active">Resources</div>
-        <div id="tab-export-exp" class="sub-tab-button">Experiments</div>
+        <div id="tab-export-res" class="sub-tab-button active" role="button" tabindex="0">Resources</div>
+        <div id="tab-export-exp" class="sub-tab-button" role="button" tabindex="0">Experiments</div>
     </div>
 
     <div id="import-options" class="tab-content" style="display: none">
-        <div id="tab-import-res" class="sub-tab-button active">Resources</div>
-        <div id="tab-import-exp" class="sub-tab-button">Experiments</div>
+        <div id="tab-import-res" class="sub-tab-button active" role="button" tabindex="0">Resources</div>
+        <div id="tab-import-exp" class="sub-tab-button" role="button" tabindex="0">Experiments</div>
     </div>
 
     <!-- Tab Panels -->
@@ -58,6 +58,7 @@
         <div id="content-cat" class="active">
             <form method="post">
                 <input type="hidden" name="export_type" value="resources"/>
+
                 <label for="category">Category:</label>
                 <select name="category" id="category">
                     {% for cat in categories %}
@@ -76,15 +77,20 @@
         <div id="content-exp">
             <form method="post">
                 <input type="hidden" name="export_type" value="experiments"/>
+
                 <label for="exp_filename">File name (optional):</label>
                 <input type="text" id="exp_filename" name="exp_filename"/>
+
                 <button type="submit">Export Experiments</button>
             </form>
         </div>
 
         <!-- Imports -->
         <div id="content-imp">
-{#            <div class="disclaimer">⚠️ Import functionality is under development!</div>#}
+            <div id="disclaimer-import-exp" class="disclaimer" style="display: none">
+                Warning: Import for experiments is not available yet. Use Resources import.
+            </div>
+
             <form method="post" enctype="multipart/form-data">
                 <input type="hidden" name="export_type" value="imports"/>
 
@@ -129,13 +135,15 @@
     </div>
 
     <!-- Flash Messages -->
-    {% with messages = get_flashed_messages(with_categories=true) %} {% if messages %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
     <ul class="flashes">
         {% for category, msg in messages %}
         <li class="{{ category }}">{{ msg }}</li>
         {% endfor %}
     </ul>
-    {% endif %} {% endwith %}
+    {% endif %}
+    {% endwith %}
 </div>
 
 <!-- Loading overlay -->
@@ -151,14 +159,15 @@
 
 <!-- Footer -->
 <footer class="site-footer">
-        Created for:
-            Heidelberg University, Biochemistry Center </a
-    </p>
-        Built by:
     <div class="footer-line">
+        Created for
         <a href="https://bzh.db-engine.de/" target="_blank" rel="noreferrer">Heidelberg University, Biochemistry
+            Center</a>
         •
+        <a href="https://www.sfb1638.de/" target="_blank" rel="noreferrer">SFB 1638</a>
         • Built by
+        <a href="https://github.com/dantypas3" target="_blank" rel="noreferrer">D. Antypas</a>
+    </div>
 </footer>
 
 <script>
@@ -184,8 +193,6 @@
             btnImport.classList.remove("active");
             exportOpts.style.display = "flex";
             importOpts.style.display = "none";
-
-            // default show resources export
             switchPanel("tab-export-res");
         });
 
@@ -194,31 +201,47 @@
             btnExport.classList.remove("active");
             exportOpts.style.display = "none";
             importOpts.style.display = "flex";
-
-            // default show resources import
             switchPanel("tab-import-res");
         });
 
         // Sub-tab buttons
         Object.keys(panels).forEach((tabId) => {
-            document.getElementById(tabId).addEventListener("click", () => {
-                switchPanel(tabId);
-            });
+            const el = document.getElementById(tabId);
+            if (!el) return;
+            el.addEventListener("click", () => switchPanel(tabId));
         });
 
-        function switchPanel(tabId) {
-            // deactivate all sub-tabs and panels
-            Object.keys(panels).forEach((id) => {
-                document.getElementById(id).classList.remove("active");
-                document.getElementById(panels[id]).classList.remove("active");
-                document.getElementById(panels[id]).style.display = "none";
+      function switchPanel(tabId) {
+        // deactivate all sub-tabs and panels
+        Object.keys(panels).forEach((id) => {
+          const tab = document.getElementById(id);
+          const panel = document.getElementById(panels[id]);
+                if (tab) tab.classList.remove("active");
+                if (panel) {
+                    panel.classList.remove("active");
+                    panel.style.display = "none";
+                }
             });
 
             // activate selected sub-tab and panel
-            document.getElementById(tabId).classList.add("active");
-            const panelId = panels[tabId];
-            document.getElementById(panelId).classList.add("active");
-            document.getElementById(panelId).style.display = "block";
+            const activeTab = document.getElementById(tabId);
+        const panelId = panels[tabId];
+        const activePanel = document.getElementById(panelId);
+
+        if (activeTab) activeTab.classList.add("active");
+        if (activePanel) {
+          activePanel.classList.add("active");
+          activePanel.style.display = "block";
+        }
+
+        // toggle import disclaimers
+        const expDisclaimer = document.getElementById("disclaimer-import-exp");
+        if (expDisclaimer) {
+          const showExp = tabId === "tab-import-exp";
+          expDisclaimer.style.display = showExp ? "flex" : "none";
+        }
+      }
+
         // Switch -> hidden field
         if (updateExistingSwitch && updateExistingField) {
             const sync = () => {
@@ -239,34 +262,23 @@
     const overlay = document.getElementById("loading-overlay");
     const overlayDetail = document.getElementById("loading-detail");
 
-    // Mark when a form is being submitted (export/import)
     document.querySelectorAll("form").forEach((form) => {
-        form.addEventListener("submit", () => {
-            isSubmitting = true;
-            const kind =
-                (form.querySelector('input[name="export_type"]') || {}).value || "";
+      form.addEventListener("submit", () => {
+        isSubmitting = true;
+
+        const kind = (form.querySelector('input[name="export_type"]') || {}).value || "";
             const detailMap = {
                 resources: "Exporting resources…",
                 experiments: "Exporting experiments…",
                 imports: "Importing resources…",
             };
-            if (overlayDetail) {
-                overlayDetail.textContent = detailMap[kind] || "Working…";
-            }
-            if (overlay) {
-                overlay.style.display = "flex";
-            }
 
-            // After a short delay, assume navigation is done and allow shutdown again
-            setTimeout(() => {
-                isSubmitting = false;
-                if (overlay) overlay.style.display = "none";
-            }, 3000); // 3 seconds is usually enough
-        });
+        if (overlayDetail) overlayDetail.textContent = detailMap[kind] || "Working…";
+        if (overlay) overlay.style.display = "flex";
+      });
     });
 
     window.addEventListener("beforeunload", () => {
-        // Only shut down if we're NOT in the "just submitted a form" window
         if (!isSubmitting) {
             try {
                 navigator.sendBeacon("/shutdown");
