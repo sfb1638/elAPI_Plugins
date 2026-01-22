@@ -616,7 +616,6 @@ class ResourcesImporter(BaseImporter):
             if not resource_id:
                 self._skipped_resources_counter += 1
                 continue
-			elif self.vresource id
             category = self.get_category_id(row) or self._default_category
 
             if category is not None:
