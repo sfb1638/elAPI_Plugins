@@ -52,6 +52,7 @@ class ResourcesImporter(BaseImporter):
         files_base_dir: str | Path | None = None,
         template_id: int | str | None = None,
         category_id: int | str | None = None,
+        update_existing: bool = False,
     ) -> None:
         setup_logging()
         self._endpoint: elapi.api.FixedEndpoint = get_fixed("resources")
@@ -66,11 +67,16 @@ class ResourcesImporter(BaseImporter):
         )
         self._new_resources_counter: int = 0
         self._patched_resources_counter: int = 0
+        self._skipped_resources_counter: int = 0
+        self._update_existing: bool = update_existing
         self._default_category: str | None = self.normalize_id(category_id)
         if self._default_category is not None:
             self.validate_category_id(self._default_category)
-        logger.info("Loaded resources   CSV with %d rows",
-                    len(self._resources_df))
+        self._resource_id_col: str | None = (
+            self._find_resource_id_col() if self._update_existing else None
+        )
+        logger.info("Loaded resources   CSV with %d rows", len(self._resources_df))
+
     @property
     def basic_df(self) -> pd.DataFrame:
         return self._resources_df
@@ -78,6 +84,18 @@ class ResourcesImporter(BaseImporter):
     @property
     def cols_canon(self) -> dict[str, str]:
         return self._cols_canon
+
+    @property
+    def patched_count(self) -> int:
+        return self._patched_resources_counter
+
+    @property
+    def new_count(self) -> int:
+        return self._new_resources_counter
+
+    @property
+    def skipped_count(self) -> int:
+        return self._skipped_resources_counter
 
     @property
     def endpoint(self) -> elapi.api.FixedEndpoint:
@@ -172,7 +190,9 @@ class ResourcesImporter(BaseImporter):
                 ids.append(num)
         return ids
 
-    def _post_links(self, resource_id: str, link_ops: list[tuple[str, list[int]]]) -> None:
+    def _post_links(
+        self, resource_id: str, link_ops: list[tuple[str, list[int]]]
+    ) -> None:
         """Create links via sub-endpoints (experiments_links/items_links)."""
         for endpoint_name, ids in link_ops:
             sub_endpoint = endpoint_name
@@ -185,7 +205,10 @@ class ResourcesImporter(BaseImporter):
                     )
                     resp.raise_for_status()
                     logger.debug(
-                        "Linked resource %s via %s -> %s", resource_id, sub_endpoint, link_id
+                        "Linked resource %s via %s -> %s",
+                        resource_id,
+                        sub_endpoint,
+                        link_id,
                     )
                 except Exception as exc:
                     logger.error(
@@ -205,6 +228,42 @@ class ResourcesImporter(BaseImporter):
             if s:
                 parts.append(s)
         return parts
+
+    def _find_resource_id_col(self) -> str | None:
+        """Return the column name that represents the resource id, if present."""
+        for canon, original in self._cols_canon.items():
+            if canon in {"resourceid", "resource_id"}:
+                return original
+        return None
+
+    def _parse_resource_id(
+        self, row: pd.Series, row_index: int | None = None
+    ) -> str | None:
+        """Extract and validate the resource id from a row; warn and skip on errors."""
+        if self._resource_id_col is None or self._resource_id_col not in row:
+            return None
+
+        raw_id = row[self._resource_id_col]
+        rid = self.normalize_id(raw_id)
+        label = f"row {row_index + 1}" if row_index is not None else "row ?"
+
+        if rid is None:
+            logger.warning(
+                "Skipping %s: missing Resource ID while update-existing is enabled.",
+                label,
+            )
+            return None
+
+        rid_str = str(rid).split(".")[0].strip()
+        if not rid_str.isdigit():
+            logger.warning(
+                "Skipping %s: invalid Resource ID %r while update-existing is enabled.",
+                label,
+                raw_id,
+            )
+            return None
+
+        return rid_str
 
     @staticmethod
     def _coerce_for_field(defn: dict, raw: str) -> Any | None:
@@ -323,7 +382,9 @@ class ResourcesImporter(BaseImporter):
 
         if not changed:
             if link_ops:
-                logger.info("Only links to create for resource %s; skipping metadata patch.", rid)
+                logger.info(
+                    "Only links to create for resource %s; skipping metadata patch.", rid
+                )
             else:
                 logger.info("No matching extra fields to upload for resource %s.", rid)
             return
@@ -461,14 +522,25 @@ class ResourcesImporter(BaseImporter):
         self._new_resources_counter += 1
         return resource_id
 
-    def patch_existing(self, resource_id: str, category: str, row: pd.Series) -> Any:
-        payload: dict[str, Any] = {"category": category}
+    def patch_existing(
+        self, resource_id: str, row: pd.Series, category: str | None = None
+    ) -> Any:
+        payload: dict[str, Any] = {}
+
+        if category:
+            payload["category"] = category
 
         if tags := self._get_tags_str(row):
             payload["tags"] = tags
 
         if title := self._get_title(row):
             payload["title"] = title
+
+        body_col = self._find_col_like("body")
+        if body_col and body_col in row:
+            body_val = row[body_col]
+            if not pd.isna(body_val) and str(body_val).strip():
+                payload["body"] = str(body_val)
 
         if date := self._normalize_date(row):
             payload["date"] = date
@@ -491,15 +563,74 @@ class ResourcesImporter(BaseImporter):
 
         payload["metadata"] = metadata_str
 
-        response = self.endpoint.patch(endpoint_id=resource_id, data=payload)
-        response.raise_for_status()
+        response = None
+        if payload:
+            response = self.endpoint.patch(endpoint_id=resource_id, data=payload)
+            response.raise_for_status()
+
+        path_col = self._find_path_col()
+        if path_col and path_col in row:
+            folder_path = self._resolve_folder(row[path_col])
+
+            if folder_path and folder_path.exists() and folder_path.is_dir():
+                self.attach_files(resource_id, folder_path)
+            elif folder_path and folder_path.exists() and folder_path.is_file():
+                self.attach_single_file(resource_id, folder_path)
+            elif folder_path:
+                logger.warning("Files path does not exist: %s", folder_path)
+
+        known = {canonicalize_field(name) for name in self._KNOWN_POST_FIELDS}
+        if path_col:
+            known.add(canonicalize_field(path_col))
+        self.post_extra_fields_from_row(resource_id, row, known_columns=known)
 
         logger.info("Patched resource %s", resource_id)
-        return response.status_code
+        self._patched_resources_counter += 1
+        return getattr(response, "status_code", 200)
 
     def create_all_from_csv(self, template: int | str | None = None) -> list[str]:
-        """Create every resource row in the CSV; optional template override per call."""
+        """Create or update resources from the CSV depending on the update flag."""
+        if self._update_existing:
+            return self._import_update_existing()
+        return self._import_new_resources(template)
+
+    def _import_new_resources(self, template: int | str | None) -> list[str]:
         ids: list[str] = []
         for _, row in self.basic_df.iterrows():
             ids.append(self.create_new(row=row, template=template))
+        return ids
+
+    def _import_update_existing(self) -> list[str]:
+        ids: list[str] = []
+        if not self._resource_id_col:
+            msg = (
+                "Update Existing is enabled but CSV has no 'Resource ID' column. "
+                "Add the column or disable update-existing."
+            )
+            logger.error(msg)
+            raise ValueError(msg)
+
+        for idx, row in self.basic_df.iterrows():
+            resource_id = self._parse_resource_id(row, row_index=idx)
+
+            if not resource_id:
+                self._skipped_resources_counter += 1
+                continue
+			elif self.vresource id
+            category = self.get_category_id(row) or self._default_category
+
+            if category is not None:
+                self.validate_category_id(category)
+            try:
+                self.patch_existing(resource_id=resource_id, row=row, category=category)
+                ids.append(resource_id)
+            except Exception as exc:
+                title = self._get_title(row) or "<untitled>"
+                logger.warning(
+                    "Skipping patch for Resource ID %s (%s): %s",
+                    resource_id,
+                    title,
+                    exc,
+                )
+                self._skipped_resources_counter += 1
         return ids

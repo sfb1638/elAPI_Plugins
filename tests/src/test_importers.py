@@ -212,7 +212,7 @@ def test_resources_importer_patch_existing(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(importer, "get_existing_json", fake_existing)
 
     status = importer.patch_existing(
-        resource_id="1", category="2", row=importer.basic_df.iloc[0]
+        resource_id="1", row=importer.basic_df.iloc[0], category="2"
     )
     assert status == 200
     assert importer._endpoint.last_patch is not None
