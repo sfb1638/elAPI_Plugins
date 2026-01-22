@@ -104,6 +104,25 @@
                     {% endfor %}
                 </select>
 
+                <!-- Hidden field that backend reads -->
+                <input type="hidden" name="update_existing" id="update_existing" value="no"/>
+
+                <!-- ON/OFF switch + note -->
+                <div class="switch-row" role="group" aria-label="Update existing resources">
+                    <label class="switch" for="update-existing-switch">
+                        <input type="checkbox" id="update-existing-switch" role="switch" aria-checked="false"/>
+                        <span class="slider" aria-hidden="true"></span>
+                    </label>
+
+                    <div class="switch-text">
+                        <div class="switch-title">Update Existing</div>
+                        <div class="switch-note">
+                            When enabled, uses the CSV "Resource ID" column to patch existing
+                            resources instead of creating new ones.
+                        </div>
+                    </div>
+                </div>
+
                 <button type="submit">Import Resources</button>
             </form>
         </div>
@@ -132,16 +151,14 @@
 
 <!-- Footer -->
 <footer class="site-footer">
-    <p>
         Created for:
-        <a href="https://bzh.db-engine.de/" target="_blank">
             Heidelberg University, Biochemistry Center </a
-        >, SFB 1638
     </p>
-    <p>
         Built by:
-        <a href="https://github.com/dantypas3" target="_blank">D. Antypas</a>
-    </p>
+    <div class="footer-line">
+        <a href="https://bzh.db-engine.de/" target="_blank" rel="noreferrer">Heidelberg University, Biochemistry
+        •
+        • Built by
 </footer>
 
 <script>
@@ -150,6 +167,9 @@
         const btnImport = document.getElementById("btn-import");
         const exportOpts = document.getElementById("export-options");
         const importOpts = document.getElementById("import-options");
+
+        const updateExistingSwitch = document.getElementById("update-existing-switch");
+        const updateExistingField = document.getElementById("update_existing");
 
         const panels = {
             "tab-export-res": "content-cat",
@@ -199,6 +219,14 @@
             const panelId = panels[tabId];
             document.getElementById(panelId).classList.add("active");
             document.getElementById(panelId).style.display = "block";
+        // Switch -> hidden field
+        if (updateExistingSwitch && updateExistingField) {
+            const sync = () => {
+                updateExistingField.value = updateExistingSwitch.checked ? "yes" : "no";
+                updateExistingSwitch.setAttribute("aria-checked", updateExistingSwitch.checked ? "true" : "false");
+            };
+            updateExistingSwitch.addEventListener("change", sync);
+            sync(); // init
         }
 
         // Initialize default view
