@@ -8,14 +8,14 @@ import platform
 import re
 import sys
 from dataclasses import dataclass
-from typing import Iterable, Mapping, Optional, Callable
+from typing import Callable, Iterable, Mapping, Optional
 
 import requests
 from requests.exceptions import HTTPError
 
 logger = logging.getLogger(__name__)
 
-GITHUB_REPO = "dantypas3/elAPI_Plugins"
+GITHUB_REPO = "sfb1638/elAPI_Plugins"
 GITHUB_API_LATEST = (f"https://api.github.com/repos/"
                      f"{GITHUB_REPO}/releases/latest")
 DEFAULT_TIMEOUT = 8
