@@ -633,7 +633,3 @@ class ResourcesImporter(BaseImporter):
                 )
                 self._skipped_resources_counter += 1
         return ids
-
-
-# TODO When activating the update existing the category drop down should be deactivated
-#   and the category
