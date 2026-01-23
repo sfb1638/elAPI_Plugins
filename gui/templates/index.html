@@ -261,21 +261,92 @@
     let isSubmitting = false;
     const overlay = document.getElementById("loading-overlay");
     const overlayDetail = document.getElementById("loading-detail");
+    const detailMap = {
+        resources: "Exporting resources…",
+        experiments: "Exporting experiments…",
+        imports: "Importing resources…",
+    };
+    const exportKinds = new Set(["resources", "experiments"]);
 
-    document.querySelectorAll("form").forEach((form) => {
-      form.addEventListener("submit", () => {
-        isSubmitting = true;
+    const getKind = (form) =>
+        ((form.querySelector('input[name="export_type"]') || {}).value || "").trim().toLowerCase();
 
-        const kind = (form.querySelector('input[name="export_type"]') || {}).value || "";
-            const detailMap = {
-                resources: "Exporting resources…",
-                experiments: "Exporting experiments…",
-                imports: "Importing resources…",
-            };
-
+    const showOverlay = (kind) => {
         if (overlayDetail) overlayDetail.textContent = detailMap[kind] || "Working…";
         if (overlay) overlay.style.display = "flex";
-      });
+    };
+
+    const hideOverlay = () => {
+        if (overlay) overlay.style.display = "none";
+    };
+
+    const extractFilename = (contentDisposition) => {
+        if (!contentDisposition) return null;
+        const match = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(contentDisposition);
+        if (!match) return null;
+        return match[1].replace(/['"]/g, "");
+    };
+
+    const guessFallbackName = (form, kind) => {
+        const nameField =
+            form.querySelector('input[name="filename"]') ||
+            form.querySelector('input[name="exp_filename"]');
+        if (nameField && nameField.value) return nameField.value;
+        return kind === "experiments" ? "experiments.xlsx" : "resources.xlsx";
+    };
+
+    const downloadExport = async (form, kind) => {
+        const formData = new FormData(form);
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const previousDisabled = submitBtn?.disabled ?? false;
+        if (submitBtn) submitBtn.disabled = true;
+
+        try {
+            const response = await fetch(form.action || window.location.href, {
+                method: form.method || "POST",
+                body: formData,
+                credentials: "same-origin",
+            });
+
+            if (!response.ok) {
+                throw new Error(`Export failed: ${response.status} ${response.statusText}`);
+            }
+
+            const blob = await response.blob();
+            const header = response.headers.get("Content-Disposition");
+            const filename = extractFilename(header) || guessFallbackName(form, kind);
+
+            const url = window.URL.createObjectURL(blob);
+            const anchor = document.createElement("a");
+            anchor.href = url;
+            anchor.download = filename;
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            alert(err instanceof Error ? err.message : "Export failed. Please try again.");
+        } finally {
+            if (submitBtn) submitBtn.disabled = previousDisabled;
+            isSubmitting = false;
+            hideOverlay();
+        }
+    };
+
+    document.querySelectorAll("form").forEach((form) => {
+        form.addEventListener("submit", (event) => {
+            const kind = getKind(form);
+            showOverlay(kind);
+
+            if (exportKinds.has(kind)) {
+                event.preventDefault();
+                isSubmitting = true;
+                downloadExport(form, kind);
+                return;
+            }
+
+            isSubmitting = true;
+        });
     });
 
     window.addEventListener("beforeunload", () => {
