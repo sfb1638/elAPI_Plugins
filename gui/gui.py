@@ -107,9 +107,12 @@ def index() -> str | WerkzeugResponse:
             return send_file(path, as_attachment=True)  # type: ignore[arg-type]
 
         if action == "imports":
-            cid = int(request.form["category"])
-
             update_existing = (request.form.get("update_existing") or "no").strip().lower() == "yes"
+
+            # When update-existing is enabled the category dropdown is disabled in the UI
+            # and the request may not include a category. Treat it as optional here.
+            cid_raw = request.form.get("category")
+            cid = int(cid_raw) if cid_raw else None
             logger.info("Update existing requested? %s", update_existing)
 
             # (Optional) support "path import" in future

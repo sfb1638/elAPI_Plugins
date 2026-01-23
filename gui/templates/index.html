@@ -103,7 +103,7 @@
                         required
                 />
 
-                <label for="imp_category">Category:</label>
+                <label for="imp_category" id="imp_category_label">Category:</label>
                 <select name="category" id="imp_category">
                     {% for cat in categories %}
                     <option value="{{ cat['id'] }}">{{ cat['title'] }}</option>
@@ -179,6 +179,8 @@
 
         const updateExistingSwitch = document.getElementById("update-existing-switch");
         const updateExistingField = document.getElementById("update_existing");
+        const importCategorySelect = document.getElementById("imp_category");
+        const importCategoryLabel = document.getElementById("imp_category_label");
 
         const panels = {
             "tab-export-res": "content-cat",
@@ -211,11 +213,11 @@
             el.addEventListener("click", () => switchPanel(tabId));
         });
 
-      function switchPanel(tabId) {
-        // deactivate all sub-tabs and panels
-        Object.keys(panels).forEach((id) => {
-          const tab = document.getElementById(id);
-          const panel = document.getElementById(panels[id]);
+        function switchPanel(tabId) {
+            // deactivate all sub-tabs and panels
+            Object.keys(panels).forEach((id) => {
+                const tab = document.getElementById(id);
+                const panel = document.getElementById(panels[id]);
                 if (tab) tab.classList.remove("active");
                 if (panel) {
                     panel.classList.remove("active");
@@ -225,28 +227,41 @@
 
             // activate selected sub-tab and panel
             const activeTab = document.getElementById(tabId);
-        const panelId = panels[tabId];
-        const activePanel = document.getElementById(panelId);
+            const panelId = panels[tabId];
+            const activePanel = document.getElementById(panelId);
 
-        if (activeTab) activeTab.classList.add("active");
-        if (activePanel) {
-          activePanel.classList.add("active");
-          activePanel.style.display = "block";
-        }
+            if (activeTab) activeTab.classList.add("active");
+            if (activePanel) {
+                activePanel.classList.add("active");
+                activePanel.style.display = "block";
+            }
 
-        // toggle import disclaimers
-        const expDisclaimer = document.getElementById("disclaimer-import-exp");
-        if (expDisclaimer) {
-          const showExp = tabId === "tab-import-exp";
-          expDisclaimer.style.display = showExp ? "flex" : "none";
+            // toggle import disclaimers
+            const expDisclaimer = document.getElementById("disclaimer-import-exp");
+            if (expDisclaimer) {
+                const showExp = tabId === "tab-import-exp";
+                expDisclaimer.style.display = showExp ? "flex" : "none";
+            }
         }
-      }
 
         // Switch -> hidden field
         if (updateExistingSwitch && updateExistingField) {
             const sync = () => {
                 updateExistingField.value = updateExistingSwitch.checked ? "yes" : "no";
                 updateExistingSwitch.setAttribute("aria-checked", updateExistingSwitch.checked ? "true" : "false");
+
+                // Disable category selection when updating existing entries
+                const hideCategory = updateExistingSwitch.checked;
+                if (importCategorySelect) {
+                    importCategorySelect.disabled = hideCategory;
+                    importCategorySelect.setAttribute("aria-disabled", hideCategory ? "true" : "false");
+                    importCategorySelect.style.display = hideCategory ? "none" : "";
+                    importCategorySelect.setAttribute("aria-hidden", hideCategory ? "true" : "false");
+                }
+                if (importCategoryLabel) {
+                    importCategoryLabel.style.display = hideCategory ? "none" : "";
+                    importCategoryLabel.setAttribute("aria-hidden", hideCategory ? "true" : "false");
+                }
             };
             updateExistingSwitch.addEventListener("change", sync);
             sync(); // init
