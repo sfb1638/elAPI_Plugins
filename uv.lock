@@ -598,7 +598,7 @@ wheels = [
 
 [[package]]
 name = "elapi-plugins"
-version = "0.1.0"
+version = "1.0b0"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
