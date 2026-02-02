@@ -75,7 +75,7 @@ class ResourcesImporter(BaseImporter):
         self._resource_id_col: str | None = (
             self._find_resource_id_col() if self._update_existing else None
         )
-        logger.info("Loaded resources   CSV with %d rows", len(self._resources_df))
+        logger.info("Loaded resources CSV with %d rows", len(self._resources_df))
 
     @property
     def basic_df(self) -> pd.DataFrame:
@@ -151,7 +151,6 @@ class ResourcesImporter(BaseImporter):
         if known_columns:
             known_canon |= {canonicalize_field(x) for x in known_columns}
         extras: dict[str, tuple[str, Any]] = {}
-        # Collects non‑null, non‑standard fields from row
         for col, val in row.items():
             if not isinstance(col, str):
                 continue
@@ -178,7 +177,6 @@ class ResourcesImporter(BaseImporter):
 
         ids: list[int] = []
         for chunk in ResourcesImporter._split_multi(text):
-            # Allow numbers that may have been read as floats like '123.0'
             cleaned = chunk.strip()
             try:
                 num = int(float(cleaned))
@@ -274,11 +272,9 @@ class ResourcesImporter(BaseImporter):
 
         if ftype == "select":
             vals = ResourcesImporter._split_multi(raw)
-            # Coerces single or multiple select values
             if allow_multi:
                 lower_map = {o.lower(): o for o in options_set}
                 picked: list[str] = []
-                # Accumulates case‑sensitive and insensitive matches from options
                 for v in vals:
                     if v in options_set and v not in picked:
                         picked.append(v)
@@ -323,7 +319,6 @@ class ResourcesImporter(BaseImporter):
         elab_extra_fields: dict[str, dict] = metadata.setdefault("extra_fields", {})
 
         defs_by_canon: dict[str, str] = {}
-
         for orig_key in list(elab_extra_fields.keys()):
             c = canonicalize_field(orig_key)
             if c not in defs_by_canon:
@@ -332,10 +327,8 @@ class ResourcesImporter(BaseImporter):
         csv_extras = self._collect_csv_extra_fields(row, known_columns=known_columns)
 
         changed: dict[str, Any] = {}
-
         link_ops: list[tuple[str, list[int]]] = []
 
-        # Handle link columns that should target specific API link sub-endpoints
         for ckey, (orig_col, raw_val) in list(csv_extras.items()):
             if ckey not in self._LINK_COLUMN_MAP:
                 continue
@@ -343,14 +336,12 @@ class ResourcesImporter(BaseImporter):
             target_key = self._LINK_COLUMN_MAP[ckey]
             link_ids = self._parse_link_ids(raw_val)
             if not link_ids:
-                # leave as normal extra if no numeric ids were found
                 continue
 
-            del csv_extras[ckey]  # avoid double-handling as generic extra
+            del csv_extras[ckey]
             link_ops.append((target_key, link_ids))
 
         for ckey, (orig_col, raw_val) in csv_extras.items():
-            # Updates resource with coerced value when definition exists
             if ckey in defs_by_canon:
                 real_key = defs_by_canon[ckey]
                 defn = elab_extra_fields.get(real_key) or {}
@@ -372,12 +363,10 @@ class ResourcesImporter(BaseImporter):
                 changed[real_key] = coerced
                 continue
 
-            # Create a new extra field when no matching definition exists on the resource
             new_key = orig_col
             elab_extra_fields[new_key] = {"value": raw_val}
             changed[new_key] = raw_val
 
-        # Create links through dedicated sub-endpoints
         self._post_links(rid, link_ops)
 
         if not changed:
@@ -396,16 +385,11 @@ class ResourcesImporter(BaseImporter):
         metadata_str = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
         payload = {"metadata": metadata_str}
 
-        if not payload:
-            logger.info("No extra fields changed for resource %s.", rid)
-            return
-
         resp = self.endpoint.patch(endpoint_id=rid, data=payload)
 
         try:
             resp.raise_for_status()
         except Exception as exc:
-            # Log server feedback to help debug invalid payloads (e.g., link fields)
             logger.error(
                 "Failed to patch extra fields for resource %s: %s %s | payload keys=%s",
                 rid,
@@ -422,7 +406,6 @@ class ResourcesImporter(BaseImporter):
         self, row: pd.Series, template: int | str | None
     ) -> dict[str, Any]:
         """Build POST payload from title, tags, category, body, template."""
-
         data: dict[str, Any] = {}
 
         effective_template = (
@@ -434,7 +417,6 @@ class ResourcesImporter(BaseImporter):
             data["template"] = effective_template
 
         body_col = self._find_col_like("body")
-
         if body_col and body_col in row:
             body_val = row[body_col]
             if not pd.isna(body_val) and str(body_val).strip():
@@ -458,6 +440,7 @@ class ResourcesImporter(BaseImporter):
 
         resource_id = str(self.get_elab_id(response))
         logger.info("Created resource %s", resource_id)
+
         category_id = self.get_category_id(row) or self._default_category
         if category_id:
             patch_resp = None
@@ -473,21 +456,11 @@ class ResourcesImporter(BaseImporter):
                     f"{getattr(patch_resp, 'text', '')}"
                 ) from exc
 
+        # ✅ FIXED: tags (use only /tags sub-endpoint, no redundant PATCH)
         tags_list = self._get_tags(row)
         if tags_list:
             self.replace_tags(resource_id, tags_list)
-            patch_resp = None
-            try:
-                patch_resp = self.endpoint.patch(
-                    endpoint_id=resource_id, data={"tags": tags}
-                )
-                patch_resp.raise_for_status()
-            except Exception as exc:
-                raise RuntimeError(
-                    f"Failed to patch tags for resource {resource_id}: "
-                    f"{getattr(patch_resp, 'status_code', '?')} "
-                    f"{getattr(patch_resp, 'text', '')}"
-                ) from exc
+
         if title := self._get_title(row):
             patch_resp = None
             try:
@@ -506,7 +479,6 @@ class ResourcesImporter(BaseImporter):
         if path_col and path_col in row:
             folder_path = self._resolve_folder(row[path_col])
 
-            # Attaches files from path if directory or file
             if folder_path and folder_path.exists() and folder_path.is_dir():
                 self.attach_files(resource_id, folder_path)
             elif folder_path and folder_path.exists() and folder_path.is_file():
@@ -560,7 +532,6 @@ class ResourcesImporter(BaseImporter):
         metadata["extra_fields"] = {k.lower(): v for k, v in extra_fields.items()}
 
         metadata_str = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
-
         payload["metadata"] = metadata_str
 
         response = None
