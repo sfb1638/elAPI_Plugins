@@ -57,6 +57,15 @@ class ResourcesImporter(BaseImporter):
         setup_logging()
         self._endpoint: elapi.api.FixedEndpoint = get_fixed("resources")
         self._resources_df: pd.DataFrame = CsvTools.csv_to_df(csv_path)
+
+        # ✅ Column name normalization (helps with tabs/nbsp/trailing whitespace)
+        self._resources_df.columns = (
+            self._resources_df.columns.astype(str)
+            .str.replace("\u00a0", " ", regex=False)  # NBSP -> space
+            .str.replace("\t", " ", regex=False)      # tabs -> space
+            .str.strip()
+        )
+
         self._cols_canon: dict[str, str] = self._canonicalize_column_indexes(
             self._resources_df.columns
         )
@@ -72,6 +81,7 @@ class ResourcesImporter(BaseImporter):
         self._default_category: str | None = self.normalize_id(category_id)
         if self._default_category is not None:
             self.validate_category_id(self._default_category)
+
         self._resource_id_col: str | None = (
             self._find_resource_id_col() if self._update_existing else None
         )
@@ -230,7 +240,8 @@ class ResourcesImporter(BaseImporter):
     def _find_resource_id_col(self) -> str | None:
         """Return the column name that represents the resource id, if present."""
         for canon, original in self._cols_canon.items():
-            if canon in {"resourceid", "resource_id"}:
+            c = canon.replace("_", "")
+            if c == "resourceid" or "resourceid" in c:
                 return original
         return None
 
@@ -456,8 +467,9 @@ class ResourcesImporter(BaseImporter):
                     f"{getattr(patch_resp, 'text', '')}"
                 ) from exc
 
-        # ✅ FIXED: tags (use only /tags sub-endpoint, no redundant PATCH)
+        # ✅ Tags via /tags sub-endpoint
         tags_list = self._get_tags(row)
+        # If you want "empty cell clears tags on create", keep this guard.
         if tags_list:
             self.replace_tags(resource_id, tags_list)
 
@@ -497,13 +509,16 @@ class ResourcesImporter(BaseImporter):
     def patch_existing(
         self, resource_id: str, row: pd.Series, category: str | None = None
     ) -> Any:
+        """
+        Patch an existing resource.
+
+        ✅ Tags are replaced via /tags sub-endpoint (same semantics as create_new),
+        because PATCHing {"tags": "..."} often does not update tags in ElabFTW.
+        """
         payload: dict[str, Any] = {}
 
         if category:
             payload["category"] = category
-
-        if tags := self._get_tags_str(row):
-            payload["tags"] = tags
 
         if title := self._get_title(row):
             payload["title"] = title
@@ -538,6 +553,13 @@ class ResourcesImporter(BaseImporter):
         if payload:
             response = self.endpoint.patch(endpoint_id=resource_id, data=payload)
             response.raise_for_status()
+
+        # ✅ FIX: replace tags via /tags endpoint (and allow clearing)
+        tags_list = self._get_tags(row)
+        # If you want "blank cell means do NOT touch tags", change to:
+        #   if tags_list: self.replace_tags(resource_id, tags_list)
+        # If you want "blank cell clears tags", keep as-is and ensure replace_tags clears.
+        self.replace_tags(resource_id, tags_list)
 
         path_col = self._find_path_col()
         if path_col and path_col in row:
