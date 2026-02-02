@@ -190,8 +190,7 @@ class BaseImporter(ABC):
         entry_id = str(entry_id)
 
         if not entry_id.isdigit():
-            raise ValueError(f"Invalid elabFTW entry ID for upload:"
-                             f" {entry_id!r}")
+            raise ValueError(f"Invalid elabFTW entry ID for upload: {entry_id!r}")
 
         logger.info("Uploading files for elabFTW entry ID %s from %s", entry_id, folder)
         files = self._iter_files_in_dir(folder, recursive=recursive)
@@ -279,13 +278,11 @@ class BaseImporter(ABC):
 
     def validate_category_id(self, cid: str) -> None:
         """Validate that a category ID is numeric."""
-
         if not str(cid).isdigit():
             raise ValueError("Category ID must be numeric.")
 
     def resolve_category_col(self) -> str | None:
         """Try to identify the column storing category ids from the DataFrame."""
-
         for c in self.basic_df.columns:
             canon = canonicalize(c)
             if (
@@ -311,7 +308,7 @@ class BaseImporter(ABC):
         return s
 
     def get_category_id(self, row: pd.Series) -> str | None:
-        """Return normalized numeric category id from row or None; raises on non-numeric."""  # noqa: E501
+        """Return normalized numeric category id from row or None; raises on non-numeric."""
         if row is None or not isinstance(row, pd.Series):
             return None
         col = self.resolve_category_col()
@@ -334,7 +331,6 @@ class BaseImporter(ABC):
 
     def _get_title(self, row: pd.Series) -> str | None:
         """Return the title value from a row."""
-
         if row is None:
             return None
         if not isinstance(row, pd.Series):
@@ -344,38 +340,53 @@ class BaseImporter(ABC):
                 return None
 
         title_col = self.cols_canon.get("title")
-
         if not title_col or title_col not in row:
             return None
 
         title_val = row[title_col]
-
         if title_val is None or str(title_val).strip() == "":
             return None
 
         return str(title_val).strip()
 
-    def replace_tags (self, resource_id: int | str, tags: list[str]) -> None:
+    # ✅ FIXED + safer
+    def replace_tags(self, resource_id: int | str, tags: list[str]) -> None:
+        """Replace tags using the /{entity}/{id}/tags sub-endpoint."""
         rid = str(resource_id)
-        tags = [t.strip() for t in tags if t and str(t).strip()]
+        if not rid.isdigit():
+            raise ValueError(f"Invalid resource id: {resource_id!r}")
 
-        # Optional: clear existing tags first (replace semantics)
-        # If you prefer "merge semantics", remove this delete.
+        # Normalize + deduplicate while preserving order
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for t in tags:
+            if t is None:
+                continue
+            s = str(t).strip()
+            if not s:
+                continue
+            if s not in seen:
+                seen.add(s)
+                normalized.append(s)
+
+        if not normalized:
+            return
+
+        # Replace semantics: clear existing tags first.
         try:
-            self.endpoint.delete(endpoint_id=rid, sub_endpoint_name="tags")
+            resp = self.endpoint.delete(endpoint_id=rid, sub_endpoint_name="tags")
+            if hasattr(resp, "raise_for_status"):
+                resp.raise_for_status()
         except Exception:
-            # Some setups/permissions might not allow delete; you can ignore or log
+            # Some setups/permissions might not allow delete; ignore or log
             pass
 
-        for t in tags:
-            # eLabFTW tags are created via POST /{entity_type}/{id}/tags :contentReference[oaicite:1]{index=1}
+        for tag in normalized:
             resp = self.endpoint.post(
                 endpoint_id=rid,
                 sub_endpoint_name="tags",
-                data={
-                    "tag": t
-                    },  # common request body shape for tag creation
-                )
+                data={"tag": tag},
+            )
             resp.raise_for_status()
 
     def _get_tags(self, row: pd.Series) -> list[str]:
@@ -389,33 +400,33 @@ class BaseImporter(ABC):
         if pd.isna(val):
             return []
 
+        tags: list[str]
+
         if isinstance(val, (list, tuple, set)):
-            return [str(x).strip() for x in val if str(x).strip()]
+            tags = [str(x).strip() for x in val if str(x).strip()]
         elif isinstance(val, str):
+            # detect delimiter
             for delim in [";", ",", "|"]:
                 if delim in val:
                     parts = val.split(delim)
                     break
             else:
                 parts = [val]
-            tags=[p.strip() for p in parts if p.strip()]
+            tags = [p.strip() for p in parts if p.strip()]
         else:
             s = str(val).strip()
             if not s or s.lower() in {"nan", "none", "null"}:
                 return []
             tags = [s]
 
-        seen = set()
-        out =[]
-
+        # Deduplicate while preserving order
+        seen: set[str] = set()
+        out: list[str] = []
         for tag in tags:
             if tag not in seen:
                 seen.add(tag)
                 out.append(tag)
-
         return out
-
-
 
     def _get_tags_str(self, row: pd.Series) -> str | None:
         return "|".join(self._get_tags(row))

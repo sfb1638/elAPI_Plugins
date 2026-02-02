@@ -1,6 +1,6 @@
 [project]
 name = "elapi-plugins"
-version = "0.1.0"
+version = "0.1-beta"
 description = "Plugin tools for eLabFTW and Labfolder migration, developed as part of the INF Project of CRC 1638 at Heidelberg University"
 
 authors = [
