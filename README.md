@@ -1,141 +1,152 @@
-<h1 align="center">Plugins for elabFTW – SFB 1638 Tools</h1>
+<h1 align="center">elAPI Plugins</h1>
+
 <p align="center">
   <img src="https://github.com/user-attachments/assets/e8ce314e-2f66-47af-9d08-b94324646984" alt="SFB1638 Logo" width="200">
 </p>
 
-This repository contains helper tools and plugin prototypes for extending
-the [elAPI framework](https://github.com/uhd-urz/elAPI).  
-elAPI Plugins are being developed as part of the INF Project of the **CRC 1638** at
-the [Heidelberg University Biochemistry Center (BZH)](https://bzh.db-engine.de/).
+<p align="center">
+  <strong>Data import and export tools for eLabFTW electronic lab notebooks</strong>
+</p>
 
-These tools are designed to simplify resource interaction (e.g., patching metadata) and serve as early building blocks
-for elAPI plugins.  
-They are built on top of the official elAPI framework.
+<p align="center">
+  <a href="https://github.com/dantypas3/elAPI_Plugins/releases">Releases</a> &middot;
+  <a href="https://github.com/uhd-urz/elAPI">elAPI Framework</a> &middot;
+  <a href="https://www.elabftw.net/">eLabFTW</a>
+</p>
+
+---
+
+## About
+
+elAPI Plugins is a desktop application for bulk importing and exporting **resources** and **experiments** in [eLabFTW](https://www.elabftw.net/) instances. It provides a browser-based GUI for researchers and lab managers who need to migrate, back up, or batch-update electronic lab notebook entries from CSV and Excel files.
+
+The project is developed as part of the **INF Project** of [CRC 1638](https://www.sfb1638.de/) at the [Heidelberg University Biochemistry Center (BZH)](https://bzh.db-engine.de/) and is built on top of the [elAPI](https://github.com/uhd-urz/elAPI) framework.
+
+---
+
+## Features
+
+### Export
+
+- Export **resources** (by category) or **experiments** to `.xlsx` files
+- Automatically extracts and flattens extra fields from eLabFTW metadata
+- Strips HTML from body content for clean spreadsheet output
+
+### Import
+
+- Create new resources or experiments from CSV files
+- Update existing entries by providing entity IDs in the CSV
+- Supported fields per entry:
+  - Title, body, date, category, template
+  - Tags (via the eLabFTW `/tags` sub-endpoint)
+  - File attachments (single files or directories)
+  - Extra fields (matched to existing template fields with type coercion)
+  - Entity links (experiment-to-experiment, experiment-to-resource)
+- Intelligent column matching: handles non-breaking spaces, tabs, and case variations
+- Automatic delimiter detection for CSV files (comma, semicolon, tab, pipe)
 
 ---
 
 ## Prerequisites
 
-- [elAPI](https://github.com/uhd-urz/elAPI?tab=readme-ov-file#installation) must be installed and initialized with a
-  valid elabFTW API key.
-- Follow the elAPI [installation guide](https://github.com/uhd-urz/elAPI?tab=readme-ov-file#installation) to configure
-  your environment correctly before using these tools.
+[elAPI](https://github.com/uhd-urz/elAPI) must be installed and configured with a valid eLabFTW API key before using these tools.
+
+```bash
+pip install elapi
+elapi init
+```
+
+Follow the [elAPI installation guide](https://github.com/uhd-urz/elAPI?tab=readme-ov-file#installation) for detailed instructions on setting up API credentials.
 
 ---
 
-## Important Notes
-
-- These tools depend on the external **elAPI** library. Install that library and configure API credentials as described
-  in the elAPI README.
-- The import categories functionality is still under development
-
----
-
-## Running the Export GUI
-
-The repository provides helper scripts for starting `gui.gui` in a fresh virtual environment. Ensure Python 3.12 or
-later is installed.  
-These scripts automatically check for a configured API token and, if none is found, launch `elapi init`.
-
-> **Note:** elAPI must be installed as described above.
+## Installation
 
 ### macOS
 
-Mac users no longer need to run a .command file manually.
-The GUI is now distributed as a signed .dmg installer for easier setup and integration with the system.
+1. Download the latest `.dmg` from the [Releases](https://github.com/dantypas3/elAPI_Plugins/releases) page:
+   - **Apple Silicon** (M1 / M2 / M3 / M4): `elAPI_Plugins_arm64.dmg`
+   - **Intel**: `elAPI_Plugins_x86_64.dmg`
+2. Open the `.dmg` and drag **elAPI Plugins** into your Applications folder.
+3. Launch the application from Launchpad or Finder.
 
-**To install:**
-
-1. Download the **latest .dmg** file from the _Releases Page_
-2. Double-click the .dmg to open it.
-3. Drag the application (e.g., elAPI_Plugins) into your Applications folder.
-4. Launch the app from Launchpad or Finder → Applications
-
-_Note:_
-
-1. On first launch, macOS may show a security prompt because the app isn’t from the App Store.
-   To open it, right-click the app → “Open” → “Open Anyway.
-2. Ensure that elAPI is installed and initialized with a valid API key (elapi init) before starting the GUI.
-3. If macOS blocks installation or opening:
-   - Go to System Settings → Privacy & Security.
-   - Scroll to Security and allow the app to run.
-   - Reopen it from your Applications folder.
+> **Note:** On first launch, macOS may block the application because it is not distributed through the App Store.
+> To resolve this, go to **System Settings > Privacy & Security**, scroll to the Security section, and click **Open Anyway**. Then relaunch the application.
 
 ### Windows
 
-Double-click `run_gui_hidden.vbs` or run it from a terminal. This wrapper calls `run_gui.bat`, which will:
+1. Download the latest `.exe` installer from the [Releases](https://github.com/dantypas3/elAPI_Plugins/releases) page.
+2. Run the installer and follow the on-screen instructions.
+3. Launch **elAPI Plugins** from the Start Menu or desktop shortcut.
 
-1. Create the virtual environment
-2. Install dependencies
-3. Check for an API token (runs `elapi init` if necessary)
-4. Launch the export GUI
+### Linux
 
----
+Linux users can run the application from source. Python 3.11 or later is required.
 
-## Navigating to the Repository Directory (For Beginners)
-
-If you're not familiar with the command line, follow these steps:
-
-1. **Open a Terminal / Command Prompt**
-   - **macOS/Linux:** Open the _Terminal_ app
-   - **Windows:** Press `Windows + R`, type `cmd`, and press Enter
-
-2. **Find the Repository Path**  
-   Locate the folder where you downloaded or cloned this repository.
-   - **macOS:** Right-click → “Get Info” → copy the full path
-   - **Windows:** Shift + right-click → “Copy as path”
-
-3. **Use `cd` to Navigate**  
-   In the terminal, type `cd` followed by the path:  
-   **macOS example:**
-
-   ```bash
-   cd /Users/yourusername/Downloads/elAPI_Plugins
-   ```
-
-   **Windows example:**
-
-   ```cmd
-   cd "C:\Users\YourName\Downloads\elAPI_Plugins"
-   ```
-
-4. **Confirm You’re in the Right Folder**  
-   **macOS/Linux**
-
-   ```bash
-      ls
-   ```
-
-   **Windows**
-
-   ```bash
-     dir
-   ```
-
-   You should see:
-
-   ```
-   run_gui.command
-   requirements.txt
-   plugins/
-   utils/
-   ```
-
-5. **Run the GUI Launcher**  
-   **macOS:**
-   ```bash
-   ./run_gui.command
-   ```
-   **Windows:**
-   ```bash
-   ./run_gui.vbs
-   ```
+```bash
+git clone https://github.com/dantypas3/elAPI_Plugins.git
+cd elAPI_Plugins
+python -m venv .venv
+source .venv/bin/activate
+pip install .
+python gui/gui.py
+```
 
 ---
 
-## Where to Go Next
+## Usage
 
-- Review the [elAPI framework](https://github.com/uhd-urz/elAPI) to understand how the FixedEndpoint API works and how
-  to configure it.
-- Prepare CSV files with the expected columns and ensure your environment is set up with the correct API endpoint URLs
-  and credentials.
+After launching, the GUI opens automatically in your default browser at `http://127.0.0.1:1991`.
+
+| Action | Description |
+|--------|-------------|
+| **Export resources** | Select a category and download all matching resources as an `.xlsx` file. |
+| **Export experiments** | Download all experiments as an `.xlsx` file. |
+| **Import from CSV** | Upload a CSV file to create new entries or update existing ones. Select the target type, assign a category or template, and optionally enable update mode. |
+
+### CSV format
+
+The importer automatically detects delimiters and encoding. Column names are matched flexibly (case-insensitive, whitespace-tolerant). Recognized columns include:
+
+| Column | Purpose |
+|--------|---------|
+| `title` | Entry title |
+| `body` | Main text / body content |
+| `tags` | Comma-, semicolon-, or pipe-separated tags |
+| `category` / `category id` | Numeric category ID |
+| `template` | Numeric template ID (used on creation) |
+| `date` | Entry date (various formats supported) |
+| `experiment id` / `resource id` | Existing entry ID (for update mode) |
+| `attachments` / `files_path` | Path to a file or directory to attach |
+| `experiments links` | Comma-separated experiment IDs to link |
+| `resources links` | Comma-separated resource IDs to link |
+
+Any additional columns are matched against the extra fields defined in the entry's template and updated accordingly.
+
+---
+
+## Project Structure
+
+```
+src/
+  factories/          Factory classes for instantiating importers and exporters
+  services/
+    importers/        CSV-to-eLabFTW import logic (resources, experiments)
+    exporters/        eLabFTW-to-Excel export logic
+  utils/              Shared utilities (CSV parsing, endpoints, logging)
+gui/                  Flask-based web GUI
+config/               Runtime configuration files
+tests/                Test suite
+```
+
+---
+
+## License
+
+This project is licensed under the [GNU Affero General Public License v3.0 or later](LICENSE).
+
+---
+
+<p align="center">
+  <sub>Heidelberg University &middot; Biochemistry Center (BZH) &middot; CRC 1638 &middot; INF Project</sub>
+</p>
