@@ -44,7 +44,6 @@ class ExperimentsExporter(BaseExporter):
                 rows = data
             else:
                 rows = []
-            # Ensure every element is a dict to satisfy typing
             return [row if isinstance(row, dict) else {} for row in rows]
 
         rows = list(

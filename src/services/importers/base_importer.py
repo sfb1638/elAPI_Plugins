@@ -155,7 +155,6 @@ class BaseImporter(ABC):
         if raw_value is None or (isinstance(raw_value, float) and pd.isna(raw_value)):
             return None
 
-        # Convert to string, normalize whitespace and non-breaking spaces
         path_str = str(raw_value).replace("\u00a0", " ").strip()
         if not path_str:
             return None
@@ -349,14 +348,12 @@ class BaseImporter(ABC):
 
         return str(title_val).strip()
 
-    # ✅ FIXED + safer
     def replace_tags(self, resource_id: int | str, tags: list[str]) -> None:
         """Replace tags using the /{entity}/{id}/tags sub-endpoint."""
         rid = str(resource_id)
         if not rid.isdigit():
             raise ValueError(f"Invalid resource id: {resource_id!r}")
 
-        # Normalize + deduplicate while preserving order
         normalized: list[str] = []
         seen: set[str] = set()
         for t in tags:
@@ -419,7 +416,6 @@ class BaseImporter(ABC):
                 return []
             tags = [s]
 
-        # Deduplicate while preserving order
         seen: set[str] = set()
         out: list[str] = []
         for tag in tags:

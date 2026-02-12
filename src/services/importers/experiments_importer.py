@@ -58,7 +58,6 @@ class ExperimentsImporter(BaseImporter):
         self._endpoint: elapi.api.FixedEndpoint = get_fixed("experiments")
         self._experiments_df: pd.DataFrame = CsvTools.csv_to_df(csv_path)
 
-        # Column name normalization (helps with tabs/nbsp/trailing whitespace)
         self._experiments_df.columns = (
             self._experiments_df.columns.astype(str)
             .str.replace("\u00a0", " ", regex=False)  # NBSP -> space
@@ -467,7 +466,6 @@ class ExperimentsImporter(BaseImporter):
                     f"{getattr(patch_resp, 'text', '')}"
                 ) from exc
 
-        # Tags via /tags sub-endpoint
         tags_list = self._get_tags(row)
         if tags_list:
             self.replace_tags(experiment_id, tags_list)
@@ -553,7 +551,6 @@ class ExperimentsImporter(BaseImporter):
             response = self.endpoint.patch(endpoint_id=experiment_id, data=payload)
             response.raise_for_status()
 
-        # Replace tags via /tags endpoint (and allow clearing)
         tags_list = self._get_tags(row)
         self.replace_tags(experiment_id, tags_list)
 

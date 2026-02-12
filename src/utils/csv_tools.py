@@ -16,7 +16,6 @@ class CsvTools:
 
     @staticmethod
     def _normalize_text(text: str) -> str:
-        # Normalize pesky characters/newlines that often confuse csv.Sniffer/pandas
         return (
             text.replace("\ufeff", "")  # BOM
             .replace("\u00a0", " ")  # NBSP -> space
@@ -51,9 +50,6 @@ class CsvTools:
             raw = f.read()
         raw = CsvTools._normalize_text(raw)
 
-        # Use engine="python" for slightly more forgiving parsing on oddities.
-        # If your data may contain delimiter characters inside quoted fields,
-        # pandas will handle them by default with quotechar='"'.
         df = pd.read_csv(
             StringIO(raw),
             sep=delimiter,

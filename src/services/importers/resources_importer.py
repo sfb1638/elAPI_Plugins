@@ -58,7 +58,6 @@ class ResourcesImporter(BaseImporter):
         self._endpoint: elapi.api.FixedEndpoint = get_fixed("resources")
         self._resources_df: pd.DataFrame = CsvTools.csv_to_df(csv_path)
 
-        # ✅ Column name normalization (helps with tabs/nbsp/trailing whitespace)
         self._resources_df.columns = (
             self._resources_df.columns.astype(str)
             .str.replace("\u00a0", " ", regex=False)  # NBSP -> space
@@ -467,9 +466,7 @@ class ResourcesImporter(BaseImporter):
                     f"{getattr(patch_resp, 'text', '')}"
                 ) from exc
 
-        # ✅ Tags via /tags sub-endpoint
         tags_list = self._get_tags(row)
-        # If you want "empty cell clears tags on create", keep this guard.
         if tags_list:
             self.replace_tags(resource_id, tags_list)
 
@@ -512,8 +509,8 @@ class ResourcesImporter(BaseImporter):
         """
         Patch an existing resource.
 
-        ✅ Tags are replaced via /tags sub-endpoint (same semantics as create_new),
-        because PATCHing {"tags": "..."} often does not update tags in ElabFTW.
+        Tags are replaced via /tags sub-endpoint because PATCHing
+        {"tags": "..."} often does not update tags in ElabFTW.
         """
         payload: dict[str, Any] = {}
 
@@ -554,11 +551,7 @@ class ResourcesImporter(BaseImporter):
             response = self.endpoint.patch(endpoint_id=resource_id, data=payload)
             response.raise_for_status()
 
-        # ✅ FIX: replace tags via /tags endpoint (and allow clearing)
         tags_list = self._get_tags(row)
-        # If you want "blank cell means do NOT touch tags", change to:
-        #   if tags_list: self.replace_tags(resource_id, tags_list)
-        # If you want "blank cell clears tags", keep as-is and ensure replace_tags clears.
         self.replace_tags(resource_id, tags_list)
 
         path_col = self._find_path_col()

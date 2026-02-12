@@ -92,7 +92,7 @@ def paged_fetch(
                 current_limit = max(min_limit, math.ceil(current_limit / 2))
 
         if not page:
-            # too many retries -> skip this window and continue; otherwise stop
+            # Exhausted retries: skip this window and advance
             if attempt >= max_retries:
                 if on_progress:
                     on_progress(0, offset, current_limit)
