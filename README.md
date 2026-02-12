@@ -148,5 +148,5 @@ This project is licensed under the [GNU Affero General Public License v3.0 or la
 ---
 
 <p align="center">
-  <sub>Heidelberg University &middot; Biochemistry Center (BZH) &middot; CRC 1638 &middot; INF Project</sub>
+  <sub>Heidelberg University &middot; <a href="https://bzh.db-engine.de/">Biochemistry Center (BZH)</a> &middot; <a href="https://www.sfb1638.de/">SFB 1638</a> &middot; INF Project</sub>
 </p>
