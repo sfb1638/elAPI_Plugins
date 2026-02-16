@@ -222,9 +222,19 @@ def fetch_latest_release (
     return resp.json(), resp.headers.get("ETag")
 
 
+def _default_preferred_exts () -> tuple[str, ...]:
+    """Return preferred asset extensions for the current platform."""
+    if _is_windows():
+        return (".exe", ".zip")
+    if _is_macos():
+        return (".dmg", ".zip")
+    # Linux / other: prefer source archives
+    return (".tar.gz", ".zip")
+
+
 def check_for_update (
     current_version: str | None = None,
-    preferred_exts: tuple[str, ...] = (".dmg", ".exe", ".zip"),
+    preferred_exts: tuple[str, ...] | None = None,
     etag: str | None = None,
     session: requests.Session | None = None,
     timeout: int = DEFAULT_TIMEOUT,
@@ -232,6 +242,8 @@ def check_for_update (
     """
     Compare the installed version to the latest GitHub Release.
     """
+    if preferred_exts is None:
+        preferred_exts = _default_preferred_exts()
     current = current_version or get_current_version()
     payload, new_etag = fetch_latest_release(etag=etag, timeout=timeout,
                                              session=session)
