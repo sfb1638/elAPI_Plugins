@@ -87,12 +87,9 @@
 
         <!-- Imports -->
         <div id="content-imp">
-            <div id="disclaimer-import-exp" class="disclaimer" style="display: none">
-                Warning: Import for experiments is not available yet. Use Resources import.
-            </div>
-
             <form method="post" enctype="multipart/form-data">
                 <input type="hidden" name="export_type" value="imports"/>
+                <input type="hidden" name="import_target" id="import_target" value="resources"/>
 
                 <label for="import_file">Select file to upload:</label>
                 <input
@@ -114,7 +111,7 @@
                 <input type="hidden" name="update_existing" id="update_existing" value="no"/>
 
                 <!-- ON/OFF switch + note -->
-                <div class="switch-row" role="group" aria-label="Update existing resources">
+                <div class="switch-row" role="group" aria-label="Update existing entries">
                     <label class="switch" for="update-existing-switch">
                         <input type="checkbox" id="update-existing-switch" role="switch" aria-checked="false"/>
                         <span class="slider" aria-hidden="true"></span>
@@ -122,14 +119,14 @@
 
                     <div class="switch-text">
                         <div class="switch-title">Update Existing</div>
-                        <div class="switch-note">
+                        <div class="switch-note" id="update-existing-note">
                             When enabled, uses the CSV "Resource ID" column to patch existing
                             resources instead of creating new ones.
                         </div>
                     </div>
                 </div>
 
-                <button type="submit">Import Resources</button>
+                <button type="submit" id="import-submit-btn">Import Resources</button>
             </form>
         </div>
     </div>
@@ -236,11 +233,24 @@
                 activePanel.style.display = "block";
             }
 
-            // toggle import disclaimers
-            const expDisclaimer = document.getElementById("disclaimer-import-exp");
-            if (expDisclaimer) {
-                const showExp = tabId === "tab-import-exp";
-                expDisclaimer.style.display = showExp ? "flex" : "none";
+            // Update import form when switching between resources/experiments
+            const importTargetField = document.getElementById("import_target");
+            const importSubmitBtn = document.getElementById("import-submit-btn");
+            const updateNote = document.getElementById("update-existing-note");
+            if (tabId === "tab-import-exp") {
+                if (importTargetField) importTargetField.value = "experiments";
+                if (importSubmitBtn) importSubmitBtn.textContent = "Import Experiments";
+                if (importCategorySelect) { importCategorySelect.style.display = "none"; importCategorySelect.disabled = true; }
+                if (importCategoryLabel) importCategoryLabel.style.display = "none";
+                if (updateNote) updateNote.textContent =
+                    'When enabled, uses the CSV "Experiment ID" column to patch existing experiments instead of creating new ones.';
+            } else if (tabId === "tab-import-res") {
+                if (importTargetField) importTargetField.value = "resources";
+                if (importSubmitBtn) importSubmitBtn.textContent = "Import Resources";
+                if (importCategorySelect && !updateExistingSwitch.checked) { importCategorySelect.style.display = ""; importCategorySelect.disabled = false; }
+                if (importCategoryLabel && !updateExistingSwitch.checked) importCategoryLabel.style.display = "";
+                if (updateNote) updateNote.textContent =
+                    'When enabled, uses the CSV "Resource ID" column to patch existing resources instead of creating new ones.';
             }
         }
 
@@ -273,13 +283,23 @@
 </script>
 
 <script>
+    // Prevent the browser from navigating to a file dropped outside the file input
+    ["dragover", "drop"].forEach((evt) => {
+        document.addEventListener(evt, (e) => {
+            if (e.target.type !== "file") {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        });
+    });
+
     let isSubmitting = false;
     const overlay = document.getElementById("loading-overlay");
     const overlayDetail = document.getElementById("loading-detail");
     const detailMap = {
         resources: "Exporting resources…",
         experiments: "Exporting experiments…",
-        imports: "Importing resources…",
+        imports: "Importing…",
     };
     const exportKinds = new Set(["resources", "experiments"]);
 

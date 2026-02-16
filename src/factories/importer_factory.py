@@ -1,12 +1,14 @@
 from typing import Any
 
 from src.services.importers.base_importer import BaseImporter
+from src.services.importers.experiments_importer import ExperimentsImporter
 from src.services.importers.resources_importer import ResourcesImporter
 
 
 class ImporterFactory:
     _importers: dict[str, type[BaseImporter]] = {
         "resources": ResourcesImporter,
+        "experiments": ExperimentsImporter,
     }
 
     @classmethod

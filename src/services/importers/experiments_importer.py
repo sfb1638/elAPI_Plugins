@@ -14,23 +14,23 @@ from src.utils.common import canonicalize as canonicalize_field
 from src.utils.csv_tools import CsvTools
 from src.utils.endpoints import get_fixed
 from src.utils.logging_config import setup_logging
-from src.utils.paths import RES_IMPORTER_CONFIG
+from src.utils.paths import EXP_IMPORTER_CONFIG
 
 from .base_importer import BaseImporter
 
 logger = logging.getLogger(__name__)
 
 try:
-    with open(RES_IMPORTER_CONFIG, encoding="utf-8") as config_file:
+    with open(EXP_IMPORTER_CONFIG, encoding="utf-8") as config_file:
         CONFIG = json.load(config_file)
 except FileNotFoundError:
     raise FileNotFoundError(
-        f"Config file not found. Tried: {RES_IMPORTER_CONFIG}. "
-        "Set RES_IMPORTER_CONFIG to override, or ensure "
-        "config/res_importer_config.json exists at repo root."
+        f"Config file not found. Tried: {EXP_IMPORTER_CONFIG}. "
+        "Set EXP_IMPORTER_CONFIG to override, or ensure "
+        "config/exp_importer_config.json exists at repo root."
     ) from None
 except json.JSONDecodeError as exc:
-    raise ValueError(f"Error decoding JSON from {RES_IMPORTER_CONFIG}: {exc}") from exc
+    raise ValueError(f"Error decoding JSON from {EXP_IMPORTER_CONFIG}: {exc}") from exc
 
 
 class ExperimentsImporter(BaseImporter):

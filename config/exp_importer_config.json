@@ -1,0 +1,22 @@
+{
+  "known_post_fields": ["title", "tags", "category", "status", "template", "date", "main text"],
+  "path_col": [
+    "files_path",
+    "file_path",
+    "attachments_path",
+    "attachments",
+    "attachment"
+  ],
+  "date_patterns": [
+    "%d.%m.%Y",
+    "%d/%m/%Y",
+    "%d-%m-%Y",
+    "%m/%d/%Y",
+    "%m.%d.%Y",
+    "%m-%d-%Y",
+    "%Y/%m/%d",
+    "%Y.%m.%d",
+    "%Y-%m-%d"
+  ],
+  "upload_chunk_size": 10
+}
