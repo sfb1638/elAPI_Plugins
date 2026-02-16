@@ -18,6 +18,10 @@
         />
     </div>
 
+<div class="header">
+   <a href="{{ url_for('setup') }}" class="settings-link" title="Settings">&#9881;</a>
+</div>
+
     <h1>Manage eLabFTW Data</h1>
 
     {% if update_info and update_info.is_update_available %}
@@ -384,8 +388,16 @@
         });
     });
 
+    let isInternalNav = false;
+    document.addEventListener("click", (e) => {
+        const a = e.target.closest("a");
+        if (a && a.href && new URL(a.href, location.origin).origin === location.origin) {
+            isInternalNav = true;
+        }
+    });
+
     window.addEventListener("beforeunload", () => {
-        if (!isSubmitting) {
+        if (!isSubmitting && !isInternalNav) {
             try {
                 navigator.sendBeacon("/shutdown");
             } catch (e) {
