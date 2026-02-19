@@ -143,7 +143,7 @@ tests/                Test suite
 
 ## License
 
-Copyright (c) 2025 Dionysios Antypas, Heidelberg University.
+Copyright (c) 2025 Biochemistry Center(BZH), CRC 1638, Heidelberg University.
 
 This project is licensed under the [GNU Affero General Public License v3.0 or later](LICENSE).
 
