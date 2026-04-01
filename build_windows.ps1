@@ -125,7 +125,8 @@ $pyinstaller_cmd = @(
     "--clean",
     "--onefile",
     "--windowed",
-    "--name", "$APP_NAME"
+    "--name", "$APP_NAME",
+    "--collect-all", "pandas"
 ) + $ICON_ARG + $DATA_ARGS + @($ENTRYPOINT)
 
 & python $pyinstaller_cmd
