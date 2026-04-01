@@ -45,10 +45,12 @@ class FakeEndpoint:
         get: FakeResponse | ResponseCallable | None = None,
         post: FakeResponse | ResponseCallable | None = None,
         patch: FakeResponse | ResponseCallable | None = None,
+        delete: FakeResponse | ResponseCallable | None = None,
     ) -> None:
         self._get = get
         self._post = post
         self._patch = patch
+        self._delete = delete
 
     def get(self, *args: Any, **kwargs: Any) -> FakeResponse:
         stub = self._get
@@ -78,6 +80,16 @@ class FakeEndpoint:
             response = stub
         else:
             raise AssertionError("FakeEndpoint.patch was called without a stub")
+        return response
+
+    def delete(self, *args: Any, **kwargs: Any) -> FakeResponse:
+        stub = self._delete
+        if callable(stub):
+            response = stub(*args, **kwargs)
+        elif isinstance(stub, FakeResponse):
+            response = stub
+        else:
+            return FakeResponse()
         return response
 
 
