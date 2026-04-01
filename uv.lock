@@ -598,7 +598,7 @@ wheels = [
 
 [[package]]
 name = "elapi-plugins"
-version = "1.0.0"
+version = "1.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
@@ -608,6 +608,7 @@ dependencies = [
     { name = "numpy" },
     { name = "openpyxl" },
     { name = "pandas" },
+    { name = "pandas-stubs" },
     { name = "requests" },
     { name = "responses" },
     { name = "werkzeug" },
@@ -645,6 +646,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.3.1" },
     { name = "openpyxl", specifier = ">=3.0.0" },
     { name = "pandas", specifier = ">=2.3.1" },
+    { name = "pandas-stubs", specifier = "~=2.3.3" },
     { name = "requests", specifier = ">=2.32.4" },
     { name = "responses", specifier = ">=0.25.8" },
     { name = "werkzeug", specifier = ">=3.1.3" },

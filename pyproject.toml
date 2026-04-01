@@ -21,6 +21,7 @@ dependencies = [
     "elapi>=2.3.3",
     "openpyxl>=3.0.0",
     "responses>=0.25.8",
+    "pandas-stubs~=2.3.3",
 ]
 
 [project.optional-dependencies]

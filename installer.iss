@@ -1,7 +1,7 @@
 [Setup]
 SourceDir={#SourcePath}
 AppName=elAPI_Plugins
-AppVersion=1.0-beta
+AppVersion=1.0.1
 AppPublisher=SFB-1638
 AppPublisherURL=https://www.sfb1638.de/
 DefaultDirName={autopf}\elAPI_Plugins
