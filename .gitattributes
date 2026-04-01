@@ -1,0 +1,11 @@
+# Enforce LF line endings in the repository for all text files
+* text=auto eol=lf
+
+# Explicitly binary files (never mangle)
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.ico   binary
+*.icns  binary
+*.xlsx  binary
+*.pdf   binary
