@@ -123,6 +123,27 @@ The importer automatically detects delimiters and encoding. Column names are mat
 
 Any additional columns are matched against the extra fields defined in the entry's template and updated accordingly.
 
+### Header directives
+
+Some CSV behaviors are controlled directly by the column header:
+
+| Header syntax | Effect |
+|--------|--------|
+| `CSV Name -> eLab Name` | Renames the CSV column before import field matching. Example: `Sample ID -> External ID` imports values from the `Sample ID` column into the `External ID` field in eLabFTW. |
+
+Do not use `->` as part of a normal field name. The importer interprets any header containing `->` as a rename command, so a field name that literally contains `->` can be parsed incorrectly.
+
+### Update markers
+
+When CSV import is used in update mode, you can place special marker values in individual cells:
+
+| Marker | Effect |
+|--------|--------|
+| `$delete_V` | Replaces that cell value with an empty value before the row is processed. |
+| `$delete_F` | Removes that column from the current row before the row is processed. |
+
+These markers must match exactly. For example, `delete_V` or ` $delete_v ` are treated as normal text.
+
 ---
 
 ## Project Structure

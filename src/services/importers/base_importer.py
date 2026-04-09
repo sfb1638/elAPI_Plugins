@@ -37,6 +37,49 @@ logger = logging.getLogger(__name__)
 class BaseImporter(ABC):
     """Shared helpers for importer subclasses (ids, columns, tags, files, extras)."""
 
+    # Subclasses must populate these at construction time.
+    _KNOWN_POST_FIELDS: tuple[str, ...] = ()
+    _template_id: int | str | None = None
+    _default_category: str | None = None
+
+    # Maps canonicalized CSV column headers to their elabFTW sub-endpoint names.
+    _LINK_COLUMN_MAP: dict[str, str] = {
+        canonicalize("experiments links"): "experiments_links",
+        canonicalize("experiment link"): "experiments_links",
+        canonicalize("resources link"): "items_links",
+        canonicalize("resources links"): "items_links",
+        canonicalize("items links"): "items_links",
+    }
+
+    # region --- Abstract interface ---
+
+    @property
+    @abstractmethod
+    def basic_df(self) -> pd.DataFrame:
+        """Return the DataFrame backing the importer."""
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def cols_canon(self) -> dict[str, str]:
+        """Map canonicalized column names to their originals."""
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def endpoint(self) -> FixedEndpoint:
+        """Return the endpoint used to interact with ElabFTW."""
+        raise NotImplementedError
+
+    @property
+    def files_base_dir(self) -> Path | None:
+        """Optional base directory for resolving relative file paths."""
+        return None
+
+    # endregion
+
+    # region --- Column utilities ---
+
     def _canonicalize_column_indexes(self, columns: pd.Index) -> dict[str, str]:
         canon_column_map: dict[str, str] = {}
 
@@ -58,11 +101,46 @@ class BaseImporter(ABC):
 
         return canon_column_map
 
+    def _find_col_like(self, name: str) -> str | None:
+        """Find a column whose canonical form matches or contains ``name``."""
+        target = canonicalize(name)
+        if target in self.cols_canon:
+            return self.cols_canon[target]
+        for canon_col, original in self.cols_canon.items():
+            if target in canon_col or canon_col in target:
+                return original
+        return None
+
     def _find_path_col(self) -> str | None:
         """Find a column name that matches any known file path aliases."""
         return next(
             (col for col in self.cols_canon.values() if col in CONFIG["path_col"]), None
         )
+
+    def _find_entity_id_col(self, keyword: str) -> str | None:
+        """Return the column name whose canonical form matches or contains ``keyword``."""
+        for canon, original in self.cols_canon.items():
+            c = canon.replace("_", "")
+            if c == keyword or keyword in c:
+                return original
+        return None
+
+    # endregion
+
+    # region --- Value parsing ---
+
+    def normalize_id(self, value: Any) -> str | None:
+        """Return a normalised identifier or ``None`` if the value is empty."""
+        if value is None:
+            return None
+        if isinstance(value, float) and math.isnan(value):
+            return None
+        if isinstance(value, float) and value.is_integer():
+            value = int(value)
+        s = str(value).strip()
+        if s.lower() in {"", "nan", "none", "null"}:
+            return None
+        return s
 
     def _normalize_date(self, row: pd.Series | Any) -> str | None:
         row_series = ensure_series(row)
@@ -93,43 +171,290 @@ class BaseImporter(ABC):
         logger.warning("Unrecognized date format: %r", date_str)
         return None
 
-    @property
-    @abstractmethod
-    def basic_df(self) -> pd.DataFrame:
-        """Return the DataFrame backing the importer."""
-        raise NotImplementedError
+    def _parse_entity_id(
+        self,
+        id_col: str | None,
+        row: pd.Series,
+        row_index: int | None = None,
+        entity_label: str = "Entity",
+    ) -> str | None:
+        """Extract and validate an entity id from a row; warn and skip on errors."""
+        if id_col is None or id_col not in row:
+            return None
 
-    @property
-    @abstractmethod
-    def cols_canon(self) -> dict[str, str]:
-        """Map canonicalized column names to their originals."""
-        raise NotImplementedError
+        raw_id = row[id_col]
+        eid = self.normalize_id(raw_id)
+        label = f"row {row_index + 1}" if row_index is not None else "row ?"
 
-    @property
-    @abstractmethod
-    def endpoint(self) -> FixedEndpoint:
-        """Return the endpoint used to interact with ElabFTW."""
-        raise NotImplementedError
+        if eid is None:
+            logger.warning(
+                "Skipping %s: missing %s ID while update-existing is enabled.",
+                label,
+                entity_label,
+            )
+            return None
 
-    @property
-    def files_base_dir(self) -> Path | None:
-        """Optional base directory for resolving relative file paths."""
+        eid_str = str(eid).split(".")[0].strip()
+        if not eid_str.isdigit():
+            logger.warning(
+                "Skipping %s: invalid %s ID %r while update-existing is enabled.",
+                label,
+                entity_label,
+                raw_id,
+            )
+            return None
+
+        return eid_str
+
+    @staticmethod
+    def _split_multi(raw: str) -> list[str]:
+        raw = raw.replace("\u00a0", " ")
+        parts: list[str] = []
+        for chunk in raw.replace(";", ",").split(","):
+            s = chunk.strip()
+            if s:
+                parts.append(s)
+        return parts
+
+    @staticmethod
+    def _parse_link_ids(raw: Any) -> list[int]:
+        """Return a list of numeric link ids parsed from a CSV cell."""
+        if raw is None or (isinstance(raw, float) and pd.isna(raw)):
+            return []
+
+        text = str(raw).replace("\u00a0", " ").strip()
+        if not text:
+            return []
+
+        ids: list[int] = []
+        for chunk in BaseImporter._split_multi(text):
+            cleaned = chunk.strip()
+            try:
+                num = int(float(cleaned))
+            except Exception:
+                continue
+            if num < 0:
+                continue
+            if num not in ids:
+                ids.append(num)
+        return ids
+
+    @staticmethod
+    def _coerce_for_field(defn: dict, raw: str) -> Any | None:
+        ftype = (defn or {}).get("type")
+        allow_multi = bool((defn or {}).get("allow_multi_values"))
+        options = (defn or {}).get("options") or []
+        options_set = {str(o).strip() for o in options}
+
+        if ftype == "select":
+            vals = BaseImporter._split_multi(raw)
+            if allow_multi:
+                lower_map = {o.lower(): o for o in options_set}
+                picked: list[str] = []
+                for v in vals:
+                    if v in options_set and v not in picked:
+                        picked.append(v)
+                        continue
+                    m = lower_map.get(v.lower())
+                    if m and m not in picked:
+                        picked.append(m)
+                return picked
+            else:
+                for v in vals:
+                    if v in options_set:
+                        return v
+                lower_map = {o.lower(): o for o in options_set}
+                for v in vals:
+                    m = lower_map.get(v.lower())
+                    if m:
+                        return m
+                return None
+        else:
+            return raw
+
+    # endregion
+
+    # region --- Row field extraction ---
+
+    def _get_title(self, row: pd.Series) -> str | None:
+        """Return the title value from a row."""
+        if row is None:
+            return None
+        if not isinstance(row, pd.Series):
+            try:
+                row = pd.Series(row._asdict())
+            except Exception:
+                return None
+
+        title_col = self.cols_canon.get("title")
+        if not title_col or title_col not in row:
+            return None
+
+        title_val = row[title_col]
+        if title_val is None or str(title_val).strip() == "":
+            return None
+
+        return str(title_val).strip()
+
+    def _get_tags(self, row: pd.Series) -> list[str]:
+        """Parse tags column into list; supports sequences or delimited strings."""
+        if row is None:
+            return []
+        tags_col = self.cols_canon.get("tags")
+        if not tags_col or tags_col not in row:
+            return []
+        val = row[tags_col]
+        if pd.isna(val):
+            return []
+
+        tags: list[str]
+
+        if isinstance(val, (list, tuple, set)):
+            tags = [str(x).strip() for x in val if str(x).strip()]
+        elif isinstance(val, str):
+            # detect delimiter
+            for delim in [";", ",", "|"]:
+                if delim in val:
+                    parts = val.split(delim)
+                    break
+            else:
+                parts = [val]
+            tags = [p.strip() for p in parts if p.strip()]
+        else:
+            s = str(val).strip()
+            if not s or s.lower() in {"nan", "none", "null"}:
+                return []
+            tags = [s]
+
+        seen: set[str] = set()
+        out: list[str] = []
+        for tag in tags:
+            if tag not in seen:
+                seen.add(tag)
+                out.append(tag)
+        return out
+
+    def _get_tags_str(self, row: pd.Series) -> str | None:
+        return "|".join(self._get_tags(row))
+
+    def validate_category_id(self, cid: str) -> None:
+        """Validate that a category ID is numeric."""
+        if not str(cid).isdigit():
+            raise ValueError("Category ID must be numeric.")
+
+    def resolve_category_col(self) -> str | None:
+        """Try to identify the column storing category ids from the DataFrame."""
+        for c in self.basic_df.columns:
+            canon = canonicalize(c)
+            if (
+                canon.startswith("categoryid")
+                or "categoryid" in canon
+                or canon == "category"
+                or canon == "cat"
+            ):
+                return c
         return None
 
-    @property
-    def df(self) -> pd.DataFrame:
-        """Alias for the backing DataFrame used by some importers."""
-        return self.basic_df
+    def get_category_id(self, row: pd.Series) -> str | None:
+        """Return normalized numeric category id from row or None; raises on non-numeric."""
+        if row is None or not isinstance(row, pd.Series):
+            return None
+        col = self.resolve_category_col()
+        if col is None or col not in row:
+            return None
+        cid = self.normalize_id(row[col])
+        if cid is None:
+            return None
+        self.validate_category_id(cid)
+        return cid
 
-    def _find_col_like(self, name: str) -> str | None:
-        """Find a column whose canonical form matches or contains ``name``."""
-        target = canonicalize(name)
-        if target in self.cols_canon:
-            return self.cols_canon[target]
-        for canon_col, original in self.cols_canon.items():
-            if target in canon_col or canon_col in target:
-                return original
-        return None
+    def _collect_csv_extra_fields(
+        self, row: pd.Series, known_columns: Iterable[str] | None = None
+    ) -> dict[str, tuple[str, Any]]:
+        known_canon = {canonicalize(x) for x in self._KNOWN_POST_FIELDS}
+        if known_columns:
+            known_canon |= {canonicalize(x) for x in known_columns}
+        extras: dict[str, tuple[str, Any]] = {}
+        for col, val in row.items():
+            if not isinstance(col, str):
+                continue
+            ckey = canonicalize(col)
+            if ckey in known_canon:
+                continue
+            if val is None or (isinstance(val, float) and pd.isna(val)):
+                continue
+            sval = str(val).replace("\u00a0", " ").strip()
+            if not sval:
+                continue
+            extras[ckey] = (col, sval)
+        return extras
+
+    def _extract_known_post_fields(
+        self, row: pd.Series, template: int | str | None
+    ) -> dict[str, Any]:
+        """Build POST payload from template and body."""
+        data: dict[str, Any] = {}
+
+        effective_template = (
+            template
+            if template is not None and str(template).strip()
+            else self._template_id
+        )
+        if effective_template is not None:
+            data["template"] = effective_template
+
+        body_col = self._find_col_like("body")
+        if body_col and body_col in row:
+            body_val = row[body_col]
+            if not pd.isna(body_val) and str(body_val).strip():
+                data["body"] = str(body_val)
+
+        return data
+
+    # endregion
+
+    # region --- ElabFTW reads ---
+
+    def get_elab_id(self, response: Any) -> str:
+        """Extract numeric id from a Location header; raise if missing/invalid."""
+        headers: Mapping[str, str] | None = getattr(response, "headers", None)
+        location = str(headers.get("Location", "")) if headers is not None else ""
+        exp_id = location.rstrip("/").split("/")[-1]
+        if not exp_id.isdigit():
+            raise RuntimeError(f"Could not parse experiment ID: {exp_id!r}")
+        return exp_id
+
+    def get_existing_json(self, elab_id: str) -> dict[str, Any]:
+        """Fetch existing record JSON for id; return empty dict on failure."""
+        try:
+            logger.debug("Fetching existing JSON for id %s", elab_id)
+            response = self.endpoint.get(endpoint_id=elab_id)
+            response_json = response.json()
+            if isinstance(response_json, dict):
+                return response_json
+        except Exception as exc:
+            logger.warning("Failed to fetch existing JSON for id %s: %s", elab_id, exc)
+        return {}
+
+    def fetch_extra_fields_mapping(
+        self, elab_json: dict[str, Any]
+    ) -> dict[str, dict[str, Any]]:
+        """Map canonicalized extra field titles to their definitions."""
+        metadata_decoded = elab_json.get("metadata_decoded", {})
+        extra_fields = metadata_decoded.get("extra_fields", [])
+        mapping: dict[str, dict[str, Any]] = {}
+        if isinstance(extra_fields, list):
+            for field in extra_fields:
+                if not isinstance(field, dict):
+                    continue
+                title = field.get("title") or field.get("slug") or field.get("name")
+                if title:
+                    mapping[canonicalize(title)] = field
+        return mapping
+
+    # endregion
+
+    # region --- File uploads ---
 
     def _iter_files_in_dir(
         self, folder: str | Path, recursive: bool = True
@@ -275,220 +600,6 @@ class BaseImporter(ABC):
         if errors:
             raise RuntimeError("One or more uploads failed:\n- " + "\n- ".join(errors))
 
-    def validate_category_id(self, cid: str) -> None:
-        """Validate that a category ID is numeric."""
-        if not str(cid).isdigit():
-            raise ValueError("Category ID must be numeric.")
-
-    def resolve_category_col(self) -> str | None:
-        """Try to identify the column storing category ids from the DataFrame."""
-        for c in self.basic_df.columns:
-            canon = canonicalize(c)
-            if (
-                canon.startswith("categoryid")
-                or "categoryid" in canon
-                or canon == "category"
-                or canon == "cat"
-            ):
-                return c
-        return None
-
-    def normalize_id(self, value: Any) -> str | None:
-        """Return a normalised identifier or ``None`` if the value is empty."""
-        if value is None:
-            return None
-        if isinstance(value, float) and math.isnan(value):
-            return None
-        if isinstance(value, float) and value.is_integer():
-            value = int(value)
-        s = str(value).strip()
-        if s.lower() in {"", "nan", "none", "null"}:
-            return None
-        return s
-
-    def get_category_id(self, row: pd.Series) -> str | None:
-        """Return normalized numeric category id from row or None; raises on non-numeric."""
-        if row is None or not isinstance(row, pd.Series):
-            return None
-        col = self.resolve_category_col()
-        if col is None or col not in row:
-            return None
-        cid = self.normalize_id(row[col])
-        if cid is None:
-            return None
-        self.validate_category_id(cid)
-        return cid
-
-    def get_elab_id(self, response: Any) -> str:
-        """Extract numeric id from a Location header; raise if missing/invalid."""
-        headers: Mapping[str, str] | None = getattr(response, "headers", None)
-        location = str(headers.get("Location", "")) if headers is not None else ""
-        exp_id = location.rstrip("/").split("/")[-1]
-        if not exp_id.isdigit():
-            raise RuntimeError(f"Could not parse experiment ID: {exp_id!r}")
-        return exp_id
-
-    def _get_title(self, row: pd.Series) -> str | None:
-        """Return the title value from a row."""
-        if row is None:
-            return None
-        if not isinstance(row, pd.Series):
-            try:
-                row = pd.Series(row._asdict())
-            except Exception:
-                return None
-
-        title_col = self.cols_canon.get("title")
-        if not title_col or title_col not in row:
-            return None
-
-        title_val = row[title_col]
-        if title_val is None or str(title_val).strip() == "":
-            return None
-
-        return str(title_val).strip()
-
-    def replace_tags(self, resource_id: int | str, tags: list[str]) -> None:
-        """Replace tags using the /{entity}/{id}/tags sub-endpoint."""
-        rid = str(resource_id)
-        if not rid.isdigit():
-            raise ValueError(f"Invalid resource id: {resource_id!r}")
-
-        normalized: list[str] = []
-        seen: set[str] = set()
-        for t in tags:
-            if t is None:
-                continue
-            s = str(t).strip()
-            if not s:
-                continue
-            if s not in seen:
-                seen.add(s)
-                normalized.append(s)
-
-        if not normalized:
-            return
-
-        # Replace semantics: clear existing tags first.
-        try:
-            resp = self.endpoint.delete(endpoint_id=rid, sub_endpoint_name="tags")
-            if hasattr(resp, "raise_for_status"):
-                resp.raise_for_status()
-        except Exception:
-            # Some setups/permissions might not allow delete; ignore or log
-            pass
-
-        for tag in normalized:
-            resp = self.endpoint.post(
-                endpoint_id=rid,
-                sub_endpoint_name="tags",
-                data={"tag": tag},
-            )
-            resp.raise_for_status()
-
-    def _get_tags(self, row: pd.Series) -> list[str]:
-        """Parse tags column into list; supports sequences or delimited strings."""
-        if row is None:
-            return []
-        tags_col = self.cols_canon.get("tags")
-        if not tags_col or tags_col not in row:
-            return []
-        val = row[tags_col]
-        if pd.isna(val):
-            return []
-
-        tags: list[str]
-
-        if isinstance(val, (list, tuple, set)):
-            tags = [str(x).strip() for x in val if str(x).strip()]
-        elif isinstance(val, str):
-            # detect delimiter
-            for delim in [";", ",", "|"]:
-                if delim in val:
-                    parts = val.split(delim)
-                    break
-            else:
-                parts = [val]
-            tags = [p.strip() for p in parts if p.strip()]
-        else:
-            s = str(val).strip()
-            if not s or s.lower() in {"nan", "none", "null"}:
-                return []
-            tags = [s]
-
-        seen: set[str] = set()
-        out: list[str] = []
-        for tag in tags:
-            if tag not in seen:
-                seen.add(tag)
-                out.append(tag)
-        return out
-
-    def _get_tags_str(self, row: pd.Series) -> str | None:
-        return "|".join(self._get_tags(row))
-
-    def get_existing_json(self, elab_id: str) -> dict[str, Any]:
-        """Fetch existing record JSON for id; return empty dict on failure."""
-        try:
-            logger.debug("Fetching existing JSON for id %s", elab_id)
-            response = self.endpoint.get(endpoint_id=elab_id)
-            response_json = response.json()
-            if isinstance(response_json, dict):
-                return response_json
-        except Exception as exc:
-            logger.warning("Failed to fetch existing JSON for id %s: %s", elab_id, exc)
-        return {}
-
-    def fetch_extra_fields_mapping(
-        self, elab_json: dict[str, Any]
-    ) -> dict[str, dict[str, Any]]:
-        """Map canonicalized extra field titles to their definitions."""
-        metadata_decoded = elab_json.get("metadata_decoded", {})
-        extra_fields = metadata_decoded.get("extra_fields", [])
-        mapping: dict[str, dict[str, Any]] = {}
-        if isinstance(extra_fields, list):
-            for field in extra_fields:
-                if not isinstance(field, dict):
-                    continue
-                title = field.get("title") or field.get("slug") or field.get("name")
-                if title:
-                    mapping[canonicalize(title)] = field
-        return mapping
-
-    def update_extra_fields_from_row(
-        self, elab_id: str, row: pd.Series, known_columns: Iterable[str]
-    ) -> None:
-        """Patch existing extra fields with CSV values, skipping known columns."""
-        existing = self.get_existing_json(elab_id)
-        if not existing:
-            return
-        extra_map = self.fetch_extra_fields_mapping(existing)
-        if not extra_map:
-            return
-        updated_fields: list[str] = []
-        for column in row.index:
-            canon_col = canonicalize(column)
-            if canon_col in extra_map and canon_col not in known_columns:
-                value = row[column]
-                if pd.isna(value):
-                    val_str = ""
-                else:
-                    if hasattr(value, "item") and not isinstance(value, str):
-                        try:
-                            value = value.item()
-                        except Exception:
-                            pass
-                    val_str = str(value)
-                extra_map[canon_col]["value"] = val_str
-                updated_fields.append(canon_col)
-        patch_data = {"metadata": {"extra_fields": list(extra_map.values())}}
-        try:
-            logger.debug("Patching extra fields for id %s: %s", elab_id, updated_fields)
-            response = self.endpoint.patch(endpoint_id=elab_id, data=patch_data)
-            response.raise_for_status()
-        except Exception as exc:
-            logger.error("Failed to patch extra fields for id %s: %s", elab_id, exc)
-
     def attach_single_file(self, entity_id: int | str, file: str | Path) -> None:
         """Upload a single file; prefer 'files[]' format, fallback to 'file'."""
         eid = str(entity_id)
@@ -545,213 +656,46 @@ class BaseImporter(ABC):
             except Exception as exc:
                 logger.warning("Failed to upload %s to entry %s: %s", fp, entity_id, exc)
 
-    def _increment_new_counter(self) -> None:
-        """Increment the new-entry counter. Override in subclasses."""
+    # endregion
 
-    def create_new(self, row: pd.Series, template: int | str | None = None) -> str:
-        payload = self._extract_known_post_fields(row, template)
-        logger.debug("Creating entry with payload fields: %s", list(payload.keys()))
-        response = self.endpoint.post(data=payload)
+    # region --- ElabFTW writes ---
 
+    def replace_tags(self, resource_id: int | str, tags: list[str]) -> None:
+        """Replace tags using the /{entity}/{id}/tags sub-endpoint."""
+        rid = str(resource_id)
+        if not rid.isdigit():
+            raise ValueError(f"Invalid resource id: {resource_id!r}")
+
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for t in tags:
+            if t is None:
+                continue
+            s = str(t).strip()
+            if not s:
+                continue
+            if s not in seen:
+                seen.add(s)
+                normalized.append(s)
+
+        if not normalized:
+            return
+
+        # Replace semantics: clear existing tags first.
         try:
-            response.raise_for_status()
+            resp = self.endpoint.delete(endpoint_id=rid, sub_endpoint_name="tags")
+            if hasattr(resp, "raise_for_status"):
+                resp.raise_for_status()
         except Exception as exc:
-            title = payload.get("title", "<unknown title>")
-            raise RuntimeError(
-                f"Creation of {title!r} failed with status "
-                f"{response.status_code}: {response.text}"
-            ) from exc
+            logger.warning("Could not clear existing tags for %s: %s", rid, exc)
 
-        entity_id = str(self.get_elab_id(response))
-        logger.info("Created entry %s", entity_id)
-
-        category_id = self.get_category_id(row) or self._default_category
-        if category_id:
-            patch_resp = None
-            try:
-                patch_resp = self.endpoint.patch(
-                    endpoint_id=entity_id, data={"category": category_id}
-                )
-                patch_resp.raise_for_status()
-            except Exception as exc:
-                raise RuntimeError(
-                    f"Failed to patch category for entry {entity_id}: "
-                    f"{getattr(patch_resp, 'status_code', '?')} "
-                    f"{getattr(patch_resp, 'text', '')}"
-                ) from exc
-
-        tags_list = self._get_tags(row)
-        if tags_list:
-            self.replace_tags(entity_id, tags_list)
-
-        if title := self._get_title(row):
-            patch_resp = None
-            try:
-                patch_resp = self.endpoint.patch(
-                    endpoint_id=entity_id, data={"title": title}
-                )
-                patch_resp.raise_for_status()
-            except Exception as exc:
-                raise RuntimeError(
-                    f"Failed to patch title for entry {entity_id}: "
-                    f"{getattr(patch_resp, 'status_code', '?')} "
-                    f"{getattr(patch_resp, 'text', '')}"
-                ) from exc
-
-        path_col = self._find_path_col()
-        if path_col and path_col in row:
-            folder_path = self._resolve_folder(row[path_col])
-
-            if folder_path and folder_path.exists():
-                self.attach_files(entity_id, folder_path)
-            elif folder_path:
-                logger.warning("Files path does not exist: %s", folder_path)
-
-        known = {canonicalize(name) for name in self._KNOWN_POST_FIELDS}
-        if path_col:
-            known.add(canonicalize(path_col))
-        self.post_extra_fields_from_row(entity_id, row, known_columns=known)
-
-        self._increment_new_counter()
-        return entity_id
-
-    def _find_entity_id_col(self, keyword: str) -> str | None:
-        """Return the column name whose canonical form matches or contains ``keyword``."""
-        for canon, original in self._cols_canon.items():
-            c = canon.replace("_", "")
-            if c == keyword or keyword in c:
-                return original
-        return None
-
-    def _parse_entity_id(
-        self,
-        id_col: str | None,
-        row: pd.Series,
-        row_index: int | None = None,
-        entity_label: str = "Entity",
-    ) -> str | None:
-        """Extract and validate an entity id from a row; warn and skip on errors."""
-        if id_col is None or id_col not in row:
-            return None
-
-        raw_id = row[id_col]
-        eid = self.normalize_id(raw_id)
-        label = f"row {row_index + 1}" if row_index is not None else "row ?"
-
-        if eid is None:
-            logger.warning(
-                "Skipping %s: missing %s ID while update-existing is enabled.",
-                label,
-                entity_label,
+        for tag in normalized:
+            resp = self.endpoint.post(
+                endpoint_id=rid,
+                sub_endpoint_name="tags",
+                data={"tag": tag},
             )
-            return None
-
-        eid_str = str(eid).split(".")[0].strip()
-        if not eid_str.isdigit():
-            logger.warning(
-                "Skipping %s: invalid %s ID %r while update-existing is enabled.",
-                label,
-                entity_label,
-                raw_id,
-            )
-            return None
-
-        return eid_str
-
-    _LINK_COLUMN_MAP: dict[str, str] = {
-        canonicalize("experiments links"): "experiments_links",
-        canonicalize("experiment link"): "experiments_links",
-        canonicalize("resources link"): "items_links",
-        canonicalize("resources links"): "items_links",
-        canonicalize("items links"): "items_links",
-    }
-
-    @staticmethod
-    def _split_multi(raw: str) -> list[str]:
-        raw = raw.replace("\u00a0", " ")
-        parts: list[str] = []
-        for chunk in raw.replace(";", ",").split(","):
-            s = chunk.strip()
-            if s:
-                parts.append(s)
-        return parts
-
-    def _collect_csv_extra_fields(
-        self, row: pd.Series, known_columns: Iterable[str] | None = None
-    ) -> dict[str, tuple[str, Any]]:
-        known_canon = {canonicalize(x) for x in self._KNOWN_POST_FIELDS}
-        if known_columns:
-            known_canon |= {canonicalize(x) for x in known_columns}
-        extras: dict[str, tuple[str, Any]] = {}
-        for col, val in row.items():
-            if not isinstance(col, str):
-                continue
-            ckey = canonicalize(col)
-            if ckey in known_canon:
-                continue
-            if val is None or (isinstance(val, float) and pd.isna(val)):
-                continue
-            sval = str(val).replace("\u00a0", " ").strip()
-            if not sval:
-                continue
-            extras[ckey] = (col, sval)
-        return extras
-
-    @staticmethod
-    def _parse_link_ids(raw: Any) -> list[int]:
-        """Return a list of numeric link ids parsed from a CSV cell."""
-        if raw is None or (isinstance(raw, float) and pd.isna(raw)):
-            return []
-
-        text = str(raw).replace("\u00a0", " ").strip()
-        if not text:
-            return []
-
-        ids: list[int] = []
-        for chunk in BaseImporter._split_multi(text):
-            cleaned = chunk.strip()
-            try:
-                num = int(float(cleaned))
-            except Exception:
-                continue
-            if num < 0:
-                continue
-            if num not in ids:
-                ids.append(num)
-        return ids
-
-    @staticmethod
-    def _coerce_for_field(defn: dict, raw: str) -> Any | None:
-        ftype = (defn or {}).get("type")
-        allow_multi = bool((defn or {}).get("allow_multi_values"))
-        options = (defn or {}).get("options") or []
-        options_set = {str(o).strip() for o in options}
-
-        if ftype == "select":
-            vals = BaseImporter._split_multi(raw)
-            if allow_multi:
-                lower_map = {o.lower(): o for o in options_set}
-                picked: list[str] = []
-                for v in vals:
-                    if v in options_set and v not in picked:
-                        picked.append(v)
-                        continue
-                    m = lower_map.get(v.lower())
-                    if m and m not in picked:
-                        picked.append(m)
-                return picked
-            else:
-                for v in vals:
-                    if v in options_set:
-                        return v
-                lower_map = {o.lower(): o for o in options_set}
-                for v in vals:
-                    m = lower_map.get(v.lower())
-                    if m:
-                        return m
-                return None
-        else:
-            return raw
+            resp.raise_for_status()
 
     def _post_links(
         self, entity_id: str, link_ops: list[tuple[str, list[int]]]
@@ -781,6 +725,40 @@ class BaseImporter(ABC):
                         link_id,
                         exc,
                     )
+
+    def patch_decoded_extra_fields(
+        self, elab_id: str, row: pd.Series, known_columns: Iterable[str]
+    ) -> None:
+        """Patch extra fields using the metadata_decoded (list) format, skipping known columns."""
+        existing = self.get_existing_json(elab_id)
+        if not existing:
+            return
+        extra_map = self.fetch_extra_fields_mapping(existing)
+        if not extra_map:
+            return
+        updated_fields: list[str] = []
+        for column in row.index:
+            canon_col = canonicalize(column)
+            if canon_col in extra_map and canon_col not in known_columns:
+                value = row[column]
+                if pd.isna(value):
+                    val_str = ""
+                else:
+                    if hasattr(value, "item") and not isinstance(value, str):
+                        try:
+                            value = value.item()
+                        except Exception:
+                            pass
+                    val_str = str(value)
+                extra_map[canon_col]["value"] = val_str
+                updated_fields.append(canon_col)
+        patch_data = {"metadata": {"extra_fields": list(extra_map.values())}}
+        try:
+            logger.debug("Patching extra fields for id %s: %s", elab_id, updated_fields)
+            response = self.endpoint.patch(endpoint_id=elab_id, data=patch_data)
+            response.raise_for_status()
+        except Exception as exc:
+            logger.error("Failed to patch extra fields for id %s: %s", elab_id, exc)
 
     def post_extra_fields_from_row(
         self,
@@ -888,30 +866,84 @@ class BaseImporter(ABC):
                 f"{getattr(resp, 'status_code', '?')} {getattr(resp, 'text', '')}"
             ) from exc
 
-    def _extract_known_post_fields(
-        self, row: pd.Series, template: int | str | None
-    ) -> dict[str, Any]:
-        """Build POST payload from template and body."""
-        data: dict[str, Any] = {}
+    # endregion
 
-        effective_template = (
-            template
-            if template is not None and str(template).strip()
-            else self._template_id
-        )
-        if effective_template is not None:
-            data["template"] = effective_template
+    # region --- Entry creation ---
 
-        body_col = self._find_col_like("body")
-        if body_col and body_col in row:
-            body_val = row[body_col]
-            if not pd.isna(body_val) and str(body_val).strip():
-                data["body"] = str(body_val)
+    def _increment_new_counter(self) -> None:
+        """Increment the new-entry counter. Override in subclasses."""
 
-        return data
+    def create_new(self, row: pd.Series, template: int | str | None = None) -> str:
+        payload = self._extract_known_post_fields(row, template)
+        logger.debug("Creating entry with payload fields: %s", list(payload.keys()))
+        response = self.endpoint.post(data=payload)
+
+        try:
+            response.raise_for_status()
+        except Exception as exc:
+            title = payload.get("title", "<unknown title>")
+            raise RuntimeError(
+                f"Creation of {title!r} failed with status "
+                f"{response.status_code}: {response.text}"
+            ) from exc
+
+        entity_id = str(self.get_elab_id(response))
+        logger.info("Created entry %s", entity_id)
+
+        category_id = self.get_category_id(row) or self._default_category
+        if category_id:
+            patch_resp = None
+            try:
+                patch_resp = self.endpoint.patch(
+                    endpoint_id=entity_id, data={"category": category_id}
+                )
+                patch_resp.raise_for_status()
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Failed to patch category for entry {entity_id}: "
+                    f"{getattr(patch_resp, 'status_code', '?')} "
+                    f"{getattr(patch_resp, 'text', '')}"
+                ) from exc
+
+        tags_list = self._get_tags(row)
+        if tags_list:
+            self.replace_tags(entity_id, tags_list)
+
+        if title := self._get_title(row):
+            patch_resp = None
+            try:
+                patch_resp = self.endpoint.patch(
+                    endpoint_id=entity_id, data={"title": title}
+                )
+                patch_resp.raise_for_status()
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Failed to patch title for entry {entity_id}: "
+                    f"{getattr(patch_resp, 'status_code', '?')} "
+                    f"{getattr(patch_resp, 'text', '')}"
+                ) from exc
+
+        path_col = self._find_path_col()
+        if path_col and path_col in row:
+            folder_path = self._resolve_folder(row[path_col])
+
+            if folder_path and folder_path.exists():
+                self.attach_files(entity_id, folder_path)
+            elif folder_path:
+                logger.warning("Files path does not exist: %s", folder_path)
+
+        known = {canonicalize(name) for name in self._KNOWN_POST_FIELDS}
+        if path_col:
+            known.add(canonicalize(path_col))
+        self.post_extra_fields_from_row(entity_id, row, known_columns=known)
+
+        self._increment_new_counter()
+        return entity_id
 
     def create_all_from_csv(self, template: int | str | None = None) -> list[str]:
         """Create all items from the loaded CSV. Subclasses should override."""
         raise NotImplementedError(
             "create_all_from_csv must be implemented by importer subclasses"
         )
+
+    # endregion

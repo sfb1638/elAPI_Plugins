@@ -55,6 +55,10 @@ class ExperimentsImporter(BaseImporter):
             .str.strip()
         )
 
+        rename_map = CsvTools.detect_field_rename(self._experiments_df.columns)
+        if rename_map:
+            self._experiments_df.rename(columns=rename_map, inplace=True)
+
         self._cols_canon: dict[str, str] = self._canonicalize_column_indexes(
             self._experiments_df.columns
         )
@@ -77,6 +81,8 @@ class ExperimentsImporter(BaseImporter):
         )
         logger.info("Loaded experiments CSV with %d rows", len(self._experiments_df))
 
+    # region --- Abstract interface ---
+
     @property
     def basic_df(self) -> pd.DataFrame:
         return self._experiments_df
@@ -86,18 +92,6 @@ class ExperimentsImporter(BaseImporter):
         return self._cols_canon
 
     @property
-    def patched_count(self) -> int:
-        return self._patched_experiments_counter
-
-    @property
-    def new_count(self) -> int:
-        return self._new_experiments_counter
-
-    @property
-    def skipped_count(self) -> int:
-        return self._skipped_experiments_counter
-
-    @property
     def endpoint(self) -> elapi.api.FixedEndpoint:
         return self._endpoint
 
@@ -105,8 +99,28 @@ class ExperimentsImporter(BaseImporter):
     def files_base_dir(self) -> Path | None:
         return self._files_base_dir
 
+    # endregion
+
+    # region --- Counters ---
+
+    @property
+    def new_count(self) -> int:
+        return self._new_experiments_counter
+
+    @property
+    def patched_count(self) -> int:
+        return self._patched_experiments_counter
+
+    @property
+    def skipped_count(self) -> int:
+        return self._skipped_experiments_counter
+
     def _increment_new_counter(self) -> None:
         self._new_experiments_counter += 1
+
+    # endregion
+
+    # region --- Entry patching ---
 
     def patch_existing(
         self, experiment_id: str, row: pd.Series, category: str | None = None
@@ -183,6 +197,10 @@ class ExperimentsImporter(BaseImporter):
         self._patched_experiments_counter += 1
         return getattr(response, "status_code", 200)
 
+    # endregion
+
+    # region --- CSV import ---
+
     def create_all_from_csv(self, template: int | str | None = None) -> list[str]:
         """Create or update experiments from the CSV depending on the update flag."""
         if self._update_existing:
@@ -230,3 +248,5 @@ class ExperimentsImporter(BaseImporter):
                 )
                 self._skipped_experiments_counter += 1
         return ids
+
+    # endregion

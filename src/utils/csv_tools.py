@@ -56,3 +56,12 @@ class CsvTools:
             engine="python",
         )
         return df
+
+    @staticmethod
+    def detect_field_rename(columns: pd.Index) -> dict[str, str]:
+        """Parse 'CSV Name->ELab Name' headers and return a {old: new} rename dict."""
+        return{
+            col: col.split("->", 1)[1].strip()
+            for col in columns
+            if "->" in col
+        }

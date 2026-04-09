@@ -55,6 +55,10 @@ class ResourcesImporter(BaseImporter):
             .str.strip()
         )
 
+        rename_map = CsvTools.detect_field_rename(self._resources_df.columns)
+        if rename_map:
+            self._resources_df.rename(columns=rename_map, inplace=True)
+
         self._cols_canon: dict[str, str] = self._canonicalize_column_indexes(
             self._resources_df.columns
         )
@@ -76,6 +80,8 @@ class ResourcesImporter(BaseImporter):
         )
         logger.info("Loaded resources CSV with %d rows", len(self._resources_df))
 
+    # region --- Abstract interface ---
+
     @property
     def basic_df(self) -> pd.DataFrame:
         return self._resources_df
@@ -85,18 +91,6 @@ class ResourcesImporter(BaseImporter):
         return self._cols_canon
 
     @property
-    def patched_count(self) -> int:
-        return self._patched_resources_counter
-
-    @property
-    def new_count(self) -> int:
-        return self._new_resources_counter
-
-    @property
-    def skipped_count(self) -> int:
-        return self._skipped_resources_counter
-
-    @property
     def endpoint(self) -> elapi.api.FixedEndpoint:
         return self._endpoint
 
@@ -104,8 +98,28 @@ class ResourcesImporter(BaseImporter):
     def files_base_dir(self) -> Path | None:
         return self._files_base_dir
 
+    # endregion
+
+    # region --- Counters ---
+
+    @property
+    def new_count(self) -> int:
+        return self._new_resources_counter
+
+    @property
+    def patched_count(self) -> int:
+        return self._patched_resources_counter
+
+    @property
+    def skipped_count(self) -> int:
+        return self._skipped_resources_counter
+
     def _increment_new_counter(self) -> None:
         self._new_resources_counter += 1
+
+    # endregion
+
+    # region --- Entry patching ---
 
     def patch_existing(
         self, resource_id: str, row: pd.Series, category: str | None = None
@@ -184,6 +198,10 @@ class ResourcesImporter(BaseImporter):
         self._patched_resources_counter += 1
         return getattr(response, "status_code", 200)
 
+    # endregion
+
+    # region --- CSV import ---
+
     def create_all_from_csv(self, template: int | str | None = None) -> list[str]:
         """Create or update resources from the CSV depending on the update flag."""
         if self._update_existing:
@@ -229,3 +247,5 @@ class ResourcesImporter(BaseImporter):
                 )
                 self._skipped_resources_counter += 1
         return ids
+
+    # endregion

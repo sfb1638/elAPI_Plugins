@@ -75,7 +75,7 @@ def test_resolve_folder_with_base(tmp_path: Path) -> None:
     assert resolved == (tmp_path / "subdir" / "file.txt").resolve()
 
 
-def test_update_extra_fields_from_row(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_patch_decoded_extra_fields(monkeypatch: pytest.MonkeyPatch) -> None:
     df = pd.DataFrame({"Extra Field": ["value"]})
     imp = DummyImporter(df)
 
@@ -100,5 +100,5 @@ def test_update_extra_fields_from_row(monkeypatch: pytest.MonkeyPatch) -> None:
     imp._endpoint = FakeEndpoint(get=fake_get, patch=fake_patch)
     row = pd.Series({"Extra Field": "updated"})
 
-    imp.update_extra_fields_from_row("1", row, known_columns=set())
+    imp.patch_decoded_extra_fields("1", row, known_columns=set())
     assert "metadata" in captured["data"]
