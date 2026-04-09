@@ -5,12 +5,34 @@ import tempfile
 import threading
 import time
 import webbrowser
+from pathlib import Path
 
 import yaml
 from flask import Flask, flash, redirect, render_template, request, send_file, url_for
 from werkzeug.serving import make_server
 from werkzeug.utils import secure_filename
 from werkzeug.wrappers.response import Response as WerkzeugResponse
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _bootstrap_sys_path() -> None:
+    root = str(PROJECT_ROOT)
+    if root not in sys.path:
+        sys.path.insert(0, root)
+
+    if os.name == "nt":
+        return
+
+    windows_build_site_packages = "/.build/Lib/site-packages"
+    sys.path[:] = [
+        entry
+        for entry in sys.path
+        if not entry.replace("\\", "/").rstrip("/").endswith(windows_build_site_packages)
+    ]
+
+
+_bootstrap_sys_path()
 
 from src.factories import ExporterFactory, ImporterFactory
 from src.updater.updater import check_for_update
@@ -69,11 +91,6 @@ def _read_elapi_config() -> dict:
     except Exception:
         pass
     return {"host": "", "api_token": ""}
-
-
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-if SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, SCRIPT_DIR)
 
 app = Flask(
     __name__,
