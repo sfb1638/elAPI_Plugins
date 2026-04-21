@@ -86,10 +86,26 @@ Linux users can run the application from source. Python 3.11 or later is require
 ```bash
 git clone https://github.com/dantypas3/elAPI_Plugins.git
 cd elAPI_Plugins
-python -m venv .venv
-source .venv/bin/activate
-pip install .
+./scripts/setup_env.sh
+source .build/bin/activate
 python gui/gui.py
+```
+
+`.build` is the canonical project virtual environment for local development and notebooks. Packaging uses a separate temporary environment so it does not overwrite your working interpreter.
+
+### Development / notebooks
+
+Create or refresh the shared project environment with:
+
+```bash
+./scripts/setup_env.sh
+source .build/bin/activate
+```
+
+If you want Jupyter to use the same interpreter, register `.build` as the kernel:
+
+```bash
+.build/bin/python -m ipykernel install --user --name elapi-plugins --display-name "elAPI Plugins"
 ```
 
 ---
@@ -122,16 +138,6 @@ The importer automatically detects delimiters and encoding. Column names are mat
 | `resources links` | Comma-separated resource IDs to link |
 
 Any additional columns are matched against the extra fields defined in the entry's template and updated accordingly.
-
-### Header directives
-
-Some CSV behaviors are controlled directly by the column header:
-
-| Header syntax | Effect |
-|--------|--------|
-| `CSV Name -> eLab Name` | Renames the CSV column before import field matching. Example: `Sample ID -> External ID` imports values from the `Sample ID` column into the `External ID` field in eLabFTW. |
-
-Do not use `->` as part of a normal field name. The importer interprets any header containing `->` as a rename command, so a field name that literally contains `->` can be parsed incorrectly.
 
 ### Update markers
 
