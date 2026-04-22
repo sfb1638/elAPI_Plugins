@@ -32,6 +32,7 @@ htmlcov/
 
 # Build / dist
 .build/
+.pkg-build/
 .flake8
 build/
 dist/
