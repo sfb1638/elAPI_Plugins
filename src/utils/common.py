@@ -5,6 +5,11 @@ from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import Any, TypeVar
 
+try:
+    import httpx
+except ImportError:  # pragma: no cover - available via elapi at runtime
+    httpx = None
+
 import pandas as pd
 from bs4 import BeautifulSoup
 from requests.exceptions import (  # type: ignore[import-untyped]
@@ -59,7 +64,9 @@ def load_config(config_path: str | Path) -> dict:
 
 
 T = TypeVar("T")
-Timeouts = (ReadTimeout, ConnectTimeout)
+Timeouts: tuple[type[BaseException], ...] = (ReadTimeout, ConnectTimeout)
+if httpx is not None:
+    Timeouts += (httpx.ReadTimeout, httpx.ConnectTimeout)
 
 
 def paged_fetch(
