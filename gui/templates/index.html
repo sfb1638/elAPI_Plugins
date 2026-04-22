@@ -42,8 +42,13 @@
 
     <!-- Tabs -->
     <div class="tabs">
-        <div id="btn-export" class="tab-button active" role="button" tabindex="0">Export</div>
-        <div id="btn-import" class="tab-button" role="button" tabindex="0">Import</div>
+        <div class="tabs-primary">
+            <div id="btn-export" class="tab-button active" role="button" tabindex="0">Export</div>
+            <div id="btn-import" class="tab-button" role="button" tabindex="0">Import</div>
+        </div>
+        <div class="tabs-secondary">
+            <div id="btn-templates" class="tab-button" role="button" tabindex="0">Download Templates</div>
+        </div>
     </div>
 
     <div id="export-options" class="tab-content">
@@ -56,6 +61,11 @@
         <div id="tab-import-exp" class="sub-tab-button" role="button" tabindex="0">Experiments</div>
     </div>
 
+    <div id="templates-options" class="tab-content" style="display: none">
+        <div id="tab-templates-res" class="sub-tab-button active" role="button" tabindex="0">Resources</div>
+        <div id="tab-templates-exp" class="sub-tab-button" role="button" tabindex="0">Experiments</div>
+    </div>
+
     <!-- Tab Panels -->
     <div class="tab-panels">
         <!-- Resources Export -->
@@ -65,8 +75,8 @@
 
                 <label for="category">Category:</label>
                 <select name="category" id="category">
-                    {% for cat in categories %}
-                    <option value="{{ cat['id'] }}">{{ cat['title'] }}</option>
+                    {% for cat in export_categories %}
+                    <option value="{{ cat['id'] }}">{{ cat['label'] }}</option>
                     {% endfor %}
                 </select>
 
@@ -106,8 +116,16 @@
 
                 <label for="imp_category" id="imp_category_label">Category:</label>
                 <select name="category" id="imp_category">
-                    {% for cat in categories %}
-                    <option value="{{ cat['id'] }}">{{ cat['title'] }}</option>
+                    {% for cat in import_categories %}
+                    <option value="{{ cat['id'] }}">{{ cat['label'] }}</option>
+                    {% endfor %}
+                </select>
+
+                <label for="imp_exp_template" id="imp_exp_template_label" style="display:none">Template:</label>
+                <select name="exp_template_id" id="imp_exp_template" style="display:none" disabled>
+                    <option value="">— No template —</option>
+                    {% for tmpl in exp_templates %}
+                    <option value="{{ tmpl['id'] }}">{{ tmpl['title'] }}</option>
                     {% endfor %}
                 </select>
 
@@ -133,6 +151,19 @@
                 <button type="submit" id="import-submit-btn">Import Resources</button>
             </form>
         </div>
+
+        <!-- Template -->
+    <!--TODO add two new <div> blocks, similar to content-cat and content-exp.
+
+    <div id="content-template-res">
+      Resource template download UI goes here
+  </div>
+
+  <div id="content-template-exp">
+      Experiment template download UI goes here
+  </div>
+-->
+
     </div>
 
     <!-- Flash Messages -->
@@ -175,19 +206,26 @@
     document.addEventListener("DOMContentLoaded", () => {
         const btnExport = document.getElementById("btn-export");
         const btnImport = document.getElementById("btn-import");
+        const btnTemplates = document.getElementById("btn-templates")
+
         const exportOpts = document.getElementById("export-options");
         const importOpts = document.getElementById("import-options");
+        const templateOpts = document.getElementById("templates-options");
 
         const updateExistingSwitch = document.getElementById("update-existing-switch");
         const updateExistingField = document.getElementById("update_existing");
         const importCategorySelect = document.getElementById("imp_category");
         const importCategoryLabel = document.getElementById("imp_category_label");
+        const importExpTemplateSelect = document.getElementById("imp_exp_template");
+        const importExpTemplateLabel = document.getElementById("imp_exp_template_label");
 
         const panels = {
             "tab-export-res": "content-cat",
             "tab-export-exp": "content-exp",
             "tab-import-res": "content-imp",
-            "tab-import-exp": "content-imp", // if you later split imports, change this
+            "tab-import-exp": "content-imp",
+            "tab-templates-res": "content-templates-res",
+            "tab-templates-exp": "content-templates-exp"
         };
 
         // Main toggle (Export / Import)
@@ -246,6 +284,9 @@
                 if (importSubmitBtn) importSubmitBtn.textContent = "Import Experiments";
                 if (importCategorySelect) { importCategorySelect.style.display = "none"; importCategorySelect.disabled = true; }
                 if (importCategoryLabel) importCategoryLabel.style.display = "none";
+                const hideExpTemplate = updateExistingSwitch.checked;
+                if (importExpTemplateSelect) { importExpTemplateSelect.style.display = hideExpTemplate ? "none" : ""; importExpTemplateSelect.disabled = hideExpTemplate; }
+                if (importExpTemplateLabel) importExpTemplateLabel.style.display = hideExpTemplate ? "none" : "";
                 if (updateNote) updateNote.textContent =
                     'When enabled, uses the CSV "Experiment ID" column to patch existing experiments instead of creating new ones.';
             } else if (tabId === "tab-import-res") {
@@ -253,6 +294,8 @@
                 if (importSubmitBtn) importSubmitBtn.textContent = "Import Resources";
                 if (importCategorySelect && !updateExistingSwitch.checked) { importCategorySelect.style.display = ""; importCategorySelect.disabled = false; }
                 if (importCategoryLabel && !updateExistingSwitch.checked) importCategoryLabel.style.display = "";
+                if (importExpTemplateSelect) { importExpTemplateSelect.style.display = "none"; importExpTemplateSelect.disabled = true; }
+                if (importExpTemplateLabel) importExpTemplateLabel.style.display = "none";
                 if (updateNote) updateNote.textContent =
                     'When enabled, uses the CSV "Resource ID" column to patch existing resources instead of creating new ones.';
             }
@@ -275,6 +318,15 @@
                 if (importCategoryLabel) {
                     importCategoryLabel.style.display = hideCategory ? "none" : "";
                     importCategoryLabel.setAttribute("aria-hidden", hideCategory ? "true" : "false");
+                }
+                const isExpTab = document.getElementById("import_target")?.value === "experiments";
+                if (importExpTemplateSelect) {
+                    const hideTemplate = hideCategory || !isExpTab;
+                    importExpTemplateSelect.style.display = hideTemplate ? "none" : "";
+                    importExpTemplateSelect.disabled = hideTemplate;
+                }
+                if (importExpTemplateLabel) {
+                    importExpTemplateLabel.style.display = (hideCategory || !isExpTab) ? "none" : "";
                 }
             };
             updateExistingSwitch.addEventListener("change", sync);
@@ -407,3 +459,76 @@
 </script>
 </body>
 </html>
+
+<!-- TODO   2. Add the main Download Templates click handler.
+     You already added btnTemplates, but there is no listener for it.
+
+  Add one next to the export/import listeners. It should:
+
+  - activate btnTemplates
+  - deactivate btnExport
+  - deactivate btnImport
+  - hide exportOpts
+  - hide importOpts
+  - show templateOpts
+  - switch to a default template panel, usually "tab-templates-res"
+
+  The shape should mirror your existing handlers.
+  -->
+
+
+  <!-- TODO 3. In all three main-tab handlers, update all three buttons.
+     Right now:
+
+  - export handler only toggles export/import
+  - import handler only toggles import/export
+
+  Once you have 3 main tabs, every handler should set all 3 states explicitly.
+  For example, the export handler should:
+
+  - add active to export
+  - remove active from import
+  - remove active from templates
+
+  Do the same pattern for the other two handlers.
+  -->
+
+  <!-- 7. Also toggle all three option rows in those handlers.
+     Same idea:
+
+  - export click: show exportOpts, hide importOpts, hide templateOpts
+  - import click: hide exportOpts, show importOpts, hide templateOpts
+  - templates click: hide exportOpts, hide importOpts, show templateOpts
+-->
+
+
+  <!-- 8. Leave switchPanel() mostly alone.
+     Once the new template IDs are in panels, this part should already work. That function is generic enough.
+
+  The only thing to watch is that switchPanel() contains import-specific logic at the bottom. That logic should only run for import tabs, which it already does with:
+
+  - if (tabId === "tab-import-exp")
+  - else if (tabId === "tab-import-res")
+
+  So you do not need to add template-specific logic there unless template downloads have special UI state.
+-->
+
+ <!-- TODO 9. After that, test in this order.
+
+  - Click Download Templates
+  - Confirm only the template sub-tabs appear
+  - Click Resources
+  - Confirm content-template-res shows
+  - Click Experiments
+  - Confirm content-template-exp shows
+
+  Your current main mistakes are:
+
+  - template sub-tabs exist, but are not in panels
+  - template content panels do not exist yet
+  - both template sub-tabs are marked active
+  - templates-options is not hidden initially
+  - btnTemplates has no click handler
+
+  If you want, send me your updated panels object and the three main click handlers, and I’ll review just those before you continue.
+-->

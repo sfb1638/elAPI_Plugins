@@ -6,6 +6,7 @@ _ENDPOINT_MAP = {
     "resources": "items",
     "categories": "items_types",
     "experiments": "experiments",
+    "experiments_templates": "experiments_templates",
 }
 
 

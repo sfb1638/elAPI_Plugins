@@ -107,6 +107,28 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_DIR
 server = None
 
 
+def _build_category_options(
+    categories: list[dict], *, label_key: str, fallback_key: str = "title"
+) -> list[dict[str, int | str]]:
+    """Build stable, de-duplicated category options for dropdowns."""
+    options_by_id: dict[int, dict[str, int | str]] = {}
+
+    for category in categories:
+        raw_id = category.get("id")
+        if raw_id is None:
+            continue
+
+        cid = int(raw_id)
+        label = (category.get(label_key) or category.get(fallback_key) or "").strip()
+        existing = options_by_id.get(cid)
+
+        # Keep the first non-empty label we see for each category id.
+        if existing is None or (not existing["label"] and label):
+            options_by_id[cid] = {"id": cid, "label": label}
+
+    return sorted(options_by_id.values(), key=lambda c: str(c["label"]).lower())
+
+
 @app.route("/setup", methods=["GET", "POST"])
 def setup() -> str | WerkzeugResponse:
     if request.method == "POST":
@@ -225,7 +247,20 @@ def index() -> str | WerkzeugResponse:
                 ),
             )
         )
-        categories = sorted(categories, key=lambda c: c.get("title", "").lower())
+        import_categories = _build_category_options(categories, label_key="title")
+        export_categories = _build_category_options(
+            categories, label_key="category_title"
+        )
+
+        exp_tmpl_resp = endpoints.get_fixed("experiments_templates").get()
+        exp_tmpl_resp.raise_for_status()
+        exp_tmpl_data = exp_tmpl_resp.json()
+        exp_tmpl_list = exp_tmpl_data if isinstance(exp_tmpl_data, list) else exp_tmpl_data.get("data", [])
+        exp_templates = sorted(
+            [{"id": t["id"], "title": t.get("title", "")} for t in exp_tmpl_list if t.get("id")],
+            key=lambda t: t["title"].lower(),
+        )
+        logger.info("Loaded %d experiment templates", len(exp_templates))
     except (SystemExit, Exception) as exc:
         logger.error("Failed to load categories: %s", exc)
         flash("eLabFTW connection failed. Please check your configuration.", "error")
@@ -282,16 +317,19 @@ def index() -> str | WerkzeugResponse:
                     importer = ImporterFactory.get_importer(
                         "resources",
                         csv_path=source,
-                        template_id=cid,
-                        category_id=cid,
+                        template_id=cid if not update_existing else None,
+                        category_id=cid if update_existing else None,
                         update_existing=update_existing,
                     )
                     ids = importer.create_all_from_csv()
                     count = len(ids)
                 elif import_target == "experiments":
+                    tid_raw = request.form.get("exp_template_id") or ""
+                    exp_template_id = int(tid_raw) if tid_raw.strip().isdigit() else None
                     importer = ImporterFactory.get_importer(
                         "experiments",
                         csv_path=source,
+                        template_id=exp_template_id if not update_existing else None,
                         update_existing=update_existing,
                     )
                     ids = importer.create_all_from_csv()
@@ -315,7 +353,13 @@ def index() -> str | WerkzeugResponse:
 
             return redirect(url_for("index"))
 
-    return render_template("index.html", categories=categories, update_info=update_info)
+    return render_template(
+        "index.html",
+        import_categories=import_categories,
+        export_categories=export_categories,
+        exp_templates=exp_templates,
+        update_info=update_info,
+    )
 
 
 @app.route("/shutdown", methods=["POST"])
