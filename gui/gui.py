@@ -108,18 +108,25 @@ server = None
 
 
 def _build_category_options(
-    categories: list[dict], *, label_key: str, fallback_key: str = "title"
+    categories: list[dict],
+    *,
+    id_key: str = "id",
+    label_key: str,
+    fallback_key: str | None = "title",
 ) -> list[dict[str, int | str]]:
     """Build stable, de-duplicated category options for dropdowns."""
     options_by_id: dict[int, dict[str, int | str]] = {}
 
     for category in categories:
-        raw_id = category.get("id")
+        raw_id = category.get(id_key)
         if raw_id is None:
             continue
 
         cid = int(raw_id)
-        label = (category.get(label_key) or category.get(fallback_key) or "").strip()
+        label_value = category.get(label_key)
+        if not label_value and fallback_key is not None:
+            label_value = category.get(fallback_key)
+        label = str(label_value).strip() if label_value is not None else ""
         existing = options_by_id.get(cid)
 
         # Keep the first non-empty label we see for each category id.
@@ -227,10 +234,11 @@ def index() -> str | WerkzeugResponse:
         update_info = None
 
     try:
-        endpoint = endpoints.get_fixed("categories")
+        categories_endpoint = endpoints.get_fixed("categories")
+        resources_endpoint = endpoints.get_fixed("resources")
 
-        def get_page(limit: int, offset: int) -> list[dict]:
-            response = endpoint.get(query={"limit": limit, "offset": offset})
+        def get_category_page(limit: int, offset: int) -> list[dict]:
+            response = categories_endpoint.get(query={"limit": limit, "offset": offset})
             response.raise_for_status()
             data = response.json()
             page = data["data"] if isinstance(data, dict) and "data" in data else data
@@ -238,7 +246,7 @@ def index() -> str | WerkzeugResponse:
 
         categories = list(
             paged_fetch(
-                get_page,
+                get_category_page,
                 start_offset=0,
                 page_size=30,
                 max_retries=3,
@@ -248,8 +256,33 @@ def index() -> str | WerkzeugResponse:
             )
         )
         import_categories = _build_category_options(categories, label_key="title")
+
+        def get_resource_page(limit: int, offset: int) -> list[dict]:
+            response = resources_endpoint.get(query={"limit": limit, "offset": offset})
+            response.raise_for_status()
+            data = response.json()
+            page = data["data"] if isinstance(data, dict) and "data" in data else data
+            return list(page)
+
+        resource_categories = list(
+            paged_fetch(
+                get_resource_page,
+                start_offset=0,
+                page_size=1000,
+                max_retries=3,
+                on_progress=lambda n, off, lim: logger.info(
+                    "Fetched %d resources for export categories (offset=%d, limit=%d)",
+                    n,
+                    off,
+                    lim,
+                ),
+            )
+        )
         export_categories = _build_category_options(
-            categories, label_key="category_title"
+            resource_categories,
+            id_key="category",
+            label_key="category_title",
+            fallback_key="category",
         )
 
         exp_tmpl_resp = endpoints.get_fixed("experiments_templates").get()
