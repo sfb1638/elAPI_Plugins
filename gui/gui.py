@@ -358,7 +358,7 @@ def index() -> str | WerkzeugResponse:
                     count = len(ids)
                 elif import_target == "experiments":
                     tid_raw = request.form.get("exp_template_id") or ""
-                    exp_template_id = int(tid_raw) if tid_raw.strip().isdigit() else None
+                    exp_temqwplate_id = int(tid_raw) if tid_raw.strip().isdigit() else None
                     importer = ImporterFactory.get_importer(
                         "experiments",
                         csv_path=source,

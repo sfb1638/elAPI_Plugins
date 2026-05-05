@@ -10,7 +10,6 @@ from werkzeug.utils import secure_filename
 from src.utils.common import strip_html
 from src.utils.endpoints import get_fixed
 from src.utils.logging_config import setup_logging
-from src.utils.validators import IDValidator
 
 from .base_exporter import BaseExporter
 
@@ -26,7 +25,6 @@ class ResourcesExporter(BaseExporter):
     def fetch_data(
         self, start_offset: int = 0, page_size: int = 1000, max_retries: int = 3
     ) -> pd.DataFrame:
-        IDValidator("categories", self._category_id).validate()
         logger.info("Fetching resources for category %s", self._category_id)
         rows: list[dict] = []
         offset = start_offset

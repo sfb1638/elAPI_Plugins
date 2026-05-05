@@ -34,8 +34,11 @@ class IDValidator(Validator):
         if not _ID_PATTERN.match(self._value):
             raise ValidationError(f"Invalid {self.name}_id format.")
         try:
-            data = self._endpoint.get(endpoint_id=self._value).json()
-            return int(data["id"])
+            resp = self._endpoint.get(endpoint_id=self._value)
+            resp.raise_for_status()
+            data = resp.json()
+            item = data.get("data", data) if isinstance(data, dict) and "data" in data else data
+            return int(item["id"])
         except KeyError:
             self._endpoint.close()
             raise
