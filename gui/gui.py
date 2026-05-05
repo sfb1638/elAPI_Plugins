@@ -1,10 +1,13 @@
 import logging
 import os
+import io
 import sys
 import tempfile
+import json
 import threading
 import time
 import webbrowser
+import pandas as pd
 from pathlib import Path
 
 import yaml
@@ -309,13 +312,58 @@ def index() -> str | WerkzeugResponse:
             path = exporter.xlsx_export(fname)
             return send_file(path, as_attachment=True)  # type: ignore[arg-type]
 
-        if action == "experiments":
+        elif action == "experiments":
             fname = request.form.get("exp_filename") or None
             exporter = ExporterFactory.get_exporter("experiments")
             path = exporter.xlsx_export(fname)
             return send_file(path, as_attachment=True)  # type: ignore[arg-type]
 
-        if action == "imports":
+        elif action == "template_resources":
+            cid = int(request.form["category"])
+            resp = endpoints.get_fixed("categories").get(endpoint_id=cid)
+            resp.raise_for_status()
+            cat = resp.json()
+            try:
+                meta = json.loads(cat.get("metadata") or "{}")
+                extra_cols = list(meta.get("extra_fields", {}).keys())
+            except Exception:
+                extra_cols = []
+            standard_cols = ["title", "tags", "category", "template", "main text"]
+            columns = standard_cols + extra_cols
+            buf = io.StringIO()
+            pd.DataFrame(columns=columns).to_csv(buf, index=False)
+            buf.seek(0)
+            return send_file(
+                io.BytesIO(buf.getvalue().encode()),
+                mimetype="text/csv",
+                as_attachment=True,
+                download_name=f"resource_{cid}_template.csv"
+            )
+        elif action == "template_experiments":
+            tid = int(request.form["exp_template_id"])
+            resp = endpoints.get_fixed("experiments_templates").get(endpoint_id=tid)
+            resp.raise_for_status()
+            tmpl = resp.json()
+            try:
+                meta = json.loads(tmpl.get("metadata") or "{}")
+                extra_cols = list(meta.get("extra_fields", {}).keys())
+            except Exception:
+                extra_cols = []
+
+            standard_cols = ["title", "tags", "date", "status", "main text"]
+            columns = standard_cols + extra_cols
+
+            buf = io.StringIO()
+            pd.DataFrame(columns=columns).to_csv(buf, index=False)
+            buf.seek(0)
+            return send_file(
+                io.BytesIO(buf.getvalue().encode()),
+                mimetype="text/csv",
+                as_attachment=True,
+                download_name=f"experiment_{tid}_template.csv"
+            )
+
+        elif action == "imports":
             update_existing = (request.form.get("update_existing") or "no").strip().lower() == "yes"
 
             # When update-existing is enabled the category dropdown is disabled in the UI
@@ -358,7 +406,7 @@ def index() -> str | WerkzeugResponse:
                     count = len(ids)
                 elif import_target == "experiments":
                     tid_raw = request.form.get("exp_template_id") or ""
-                    exp_temqwplate_id = int(tid_raw) if tid_raw.strip().isdigit() else None
+                    exp_template_id = int(tid_raw) if tid_raw.strip().isdigit() else None
                     importer = ImporterFactory.get_importer(
                         "experiments",
                         csv_path=source,

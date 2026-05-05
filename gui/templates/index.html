@@ -152,19 +152,34 @@
             </form>
         </div>
 
-        <!-- Template -->
-    <!--TODO add two new <div> blocks, similar to content-cat and content-exp.
-
+        <!-- Resources Template -->
     <div id="content-template-res">
-      Resource template download UI goes here
-  </div>
-
-  <div id="content-template-exp">
-      Experiment template download UI goes here
-  </div>
--->
-
+      <form method="post">
+        <input type="hidden" name="export_type" value="template_resources"/>
+        <label for="tmpl_res_category">Category:</label>
+        <select name="category" id="tmpl_res_category">
+          {% for cat in import_categories %}
+          <option value="{{ cat['id'] }}">{{ cat['label'] }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit">Download Resources Template</button>
+      </form>
     </div>
+
+<div id="content-template-exp">
+    <form method="post">
+        <input type="hidden" name="export_type" value="template_experiments"/>
+
+        <label for="tmpl_exp_template">Experiment Template:</label>
+        <select name="exp_template_id" id="tmpl_exp_template">
+            {% for tmpl in exp_templates %}
+            <option value="{{ tmpl['id'] }}">{{ tmpl['title'] }}</option>
+            {% endfor %}
+        </select>
+
+        <button type="submit">Download Experiments Template</button>
+    </form>
+</div>
 
     <!-- Flash Messages -->
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -199,6 +214,8 @@
         <a href="https://www.sfb1638.de/" target="_blank" rel="noreferrer">SFB 1638</a>
         • Built by
         <a href="https://github.com/dantypas3" target="_blank" rel="noreferrer">D. Antypas</a>
+        • Version
+        <a href="https://github.com/sfb1638/elAPI_Plugins/releases/latest" target="_blank" rel="noreferrer">v1.1.0</a>
     </div>
 </footer>
 
@@ -224,25 +241,39 @@
             "tab-export-exp": "content-exp",
             "tab-import-res": "content-imp",
             "tab-import-exp": "content-imp",
-            "tab-templates-res": "content-templates-res",
-            "tab-templates-exp": "content-templates-exp"
+            "tab-templates-res": "content-template-res",
+            "tab-templates-exp": "content-template-exp"
         };
 
-        // Main toggle (Export / Import)
+        // Main toggle (Export / Import / Templates)
         btnExport.addEventListener("click", () => {
             btnExport.classList.add("active");
             btnImport.classList.remove("active");
+            btnTemplates.classList.remove("active");
             exportOpts.style.display = "flex";
             importOpts.style.display = "none";
+            templateOpts.style.display = "none";
             switchPanel("tab-export-res");
         });
 
         btnImport.addEventListener("click", () => {
             btnImport.classList.add("active");
             btnExport.classList.remove("active");
+            btnTemplates.classList.remove("active");
             exportOpts.style.display = "none";
             importOpts.style.display = "flex";
+            templateOpts.style.display = "none";
             switchPanel("tab-import-res");
+        });
+
+        btnTemplates.addEventListener("click", () => {
+            btnTemplates.classList.add("active");
+            btnExport.classList.remove("active");
+            btnImport.classList.remove("active");
+            exportOpts.style.display = "none";
+            importOpts.style.display = "none";
+            templateOpts.style.display = "flex";
+            switchPanel("tab-templates-res");
         });
 
         // Sub-tab buttons
@@ -356,8 +387,10 @@
         resources: "Exporting resources…",
         experiments: "Exporting experiments…",
         imports: "Importing…",
+        template_resources: "Preparing template…",
+        template_experiments: "Preparing template…",
     };
-    const exportKinds = new Set(["resources", "experiments"]);
+    const exportKinds = new Set(["resources", "experiments", "template_resources", "template_experiments"]);
 
     const getKind = (form) =>
         ((form.querySelector('input[name="export_type"]') || {}).value || "").trim().toLowerCase();
@@ -460,75 +493,3 @@
 </body>
 </html>
 
-<!-- TODO   2. Add the main Download Templates click handler.
-     You already added btnTemplates, but there is no listener for it.
-
-  Add one next to the export/import listeners. It should:
-
-  - activate btnTemplates
-  - deactivate btnExport
-  - deactivate btnImport
-  - hide exportOpts
-  - hide importOpts
-  - show templateOpts
-  - switch to a default template panel, usually "tab-templates-res"
-
-  The shape should mirror your existing handlers.
-  -->
-
-
-  <!-- TODO 3. In all three main-tab handlers, update all three buttons.
-     Right now:
-
-  - export handler only toggles export/import
-  - import handler only toggles import/export
-
-  Once you have 3 main tabs, every handler should set all 3 states explicitly.
-  For example, the export handler should:
-
-  - add active to export
-  - remove active from import
-  - remove active from templates
-
-  Do the same pattern for the other two handlers.
-  -->
-
-  <!-- 7. Also toggle all three option rows in those handlers.
-     Same idea:
-
-  - export click: show exportOpts, hide importOpts, hide templateOpts
-  - import click: hide exportOpts, show importOpts, hide templateOpts
-  - templates click: hide exportOpts, hide importOpts, show templateOpts
--->
-
-
-  <!-- 8. Leave switchPanel() mostly alone.
-     Once the new template IDs are in panels, this part should already work. That function is generic enough.
-
-  The only thing to watch is that switchPanel() contains import-specific logic at the bottom. That logic should only run for import tabs, which it already does with:
-
-  - if (tabId === "tab-import-exp")
-  - else if (tabId === "tab-import-res")
-
-  So you do not need to add template-specific logic there unless template downloads have special UI state.
--->
-
- <!-- TODO 9. After that, test in this order.
-
-  - Click Download Templates
-  - Confirm only the template sub-tabs appear
-  - Click Resources
-  - Confirm content-template-res shows
-  - Click Experiments
-  - Confirm content-template-exp shows
-
-  Your current main mistakes are:
-
-  - template sub-tabs exist, but are not in panels
-  - template content panels do not exist yet
-  - both template sub-tabs are marked active
-  - templates-options is not hidden initially
-  - btnTemplates has no click handler
-
-  If you want, send me your updated panels object and the three main click handlers, and I’ll review just those before you continue.
--->
