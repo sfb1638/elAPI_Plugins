@@ -5,27 +5,74 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from bs4 import BeautifulSoup
 
 import gui.gui as gui
 from tests.conftest import FakeEndpoint, FakeResponse, write_csv
 
 
+@pytest.fixture(autouse=True)
+def stub_elapi_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(gui, "_elapi_config_ok", lambda: True)
+
+
 def test_index_get(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_get(**kwargs: object) -> FakeResponse:
-        return FakeResponse(json_data={"data": [{"title": "A"}]})
+    def fake_get_fixed(name: str) -> FakeEndpoint:
+        if name == "categories":
+            return FakeEndpoint(
+                get=lambda **kwargs: FakeResponse(
+                    json_data={
+                        "data": [
+                            {"id": 1, "title": "Import Title"},
+                            {"id": 1, "title": "Import Title"},
+                            {"id": 3, "title": "Third Import"},
+                            {"id": 2, "title": "Second Import"},
+                            {"id": 4, "title": "Second Import"},
+                        ]
+                    }
+                )
+            )
+        if name == "resources":
+            return FakeEndpoint(
+                get=lambda **kwargs: FakeResponse(
+                    json_data={
+                        "data": [
+                            {"category": 1, "category_title": "Export Title"},
+                            {"category": 1, "category_title": "Export Title"},
+                            {"category": 3, "category_title": "Export Title"},
+                            {"category": 2, "category_title": "Second Export"},
+                            {"category": 4, "category_title": "Fourth Export"},
+                        ]
+                    }
+                )
+            )
+        return FakeEndpoint(get=lambda **kwargs: FakeResponse(json_data={"data": []}))
 
     def fake_paged_fetch(get_page: Any, **kwargs: object) -> Any:
         return get_page(limit=kwargs["page_size"], offset=kwargs["start_offset"])
 
-    monkeypatch.setattr(
-        gui.endpoints, "get_fixed", lambda name: FakeEndpoint(get=fake_get)
-    )
+    monkeypatch.setattr(gui.endpoints, "get_fixed", fake_get_fixed)
     monkeypatch.setattr(gui, "paged_fetch", fake_paged_fetch)
 
     gui.app.testing = True
     client = gui.app.test_client()
     resp = client.get("/")
     assert resp.status_code == 200
+    soup = BeautifulSoup(resp.get_data(as_text=True), "html.parser")
+    export_options = soup.select("#category option")
+    import_options = soup.select("#imp_category option")
+    assert [option.get_text(strip=True) for option in export_options] == [
+        "Export Title",
+        "Export Title",
+        "Fourth Export",
+        "Second Export",
+    ]
+    assert [option.get_text(strip=True) for option in import_options] == [
+        "Import Title",
+        "Second Import",
+        "Second Import",
+        "Third Import",
+    ]
 
 
 def test_export_resources(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

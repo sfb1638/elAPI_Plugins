@@ -5,6 +5,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import NamedTuple
 
+import httpx
 import pytest
 from requests.exceptions import (  # type: ignore[import-untyped]
     ConnectTimeout,
@@ -59,6 +60,38 @@ def test_paged_fetch_retries_and_reduces_limit(monkeypatch: pytest.MonkeyPatch) 
     assert items == [0, 1, 2, 2, 3, 4]
     # Expect initial call, retry with reduced limit after each timeout
     assert calls[:3] == [(6, 0), (3, 0), (2, 0)]
+
+
+def test_paged_fetch_retries_on_httpx_timeouts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[int, int]] = []
+
+    def fake_sleep(seconds: float) -> None:
+        return None
+
+    def get_page(limit: int, offset: int) -> list[int]:
+        calls.append((limit, offset))
+        if len(calls) == 1:
+            raise httpx.ReadTimeout("slow response")
+        if len(calls) == 2:
+            raise httpx.ConnectTimeout("slow connect")
+        return [offset + i for i in range(2)]
+
+    monkeypatch.setattr(time, "sleep", fake_sleep)
+
+    items = list(
+        paged_fetch(
+            get_page,
+            start_offset=0,
+            page_size=8,
+            max_retries=3,
+            min_limit=2,
+        )
+    )
+
+    assert items == [0, 1, 2, 3]
+    assert calls[:4] == [(8, 0), (4, 0), (2, 0), (8, 2)]
 
 
 def test_paged_fetch_stops_when_page_short() -> None:

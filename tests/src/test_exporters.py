@@ -38,16 +38,6 @@ def test_resources_exporter_process_data_extracts_extra_and_strips_html(
     ]
     endpoint = _SimpleEndpoint(pages)
 
-    class DummyValidator:
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            pass
-
-        def validate(self) -> int:
-            return 1
-
-    monkeypatch.setattr(
-        "src.services.exporters.resources_exporter.IDValidator", DummyValidator
-    )
     monkeypatch.setattr(
         "src.services.exporters.resources_exporter.get_fixed", lambda name: endpoint
     )
@@ -61,25 +51,12 @@ def test_resources_exporter_process_data_extracts_extra_and_strips_html(
     assert df.at[0, "body"] == "Hello"
 
 
-def test_resources_exporter_fetch_data_uses_validator(
+def test_resources_exporter_fetch_data_returns_data(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pages: list[dict[str, Any]] = [{"data": [{"id": 1}]}, {"data": []}]
     endpoint = _SimpleEndpoint(pages)
 
-    validated: list[bool] = []
-
-    class DummyValidator:
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            pass
-
-        def validate(self) -> int:
-            validated.append(True)
-            return 1
-
-    monkeypatch.setattr(
-        "src.services.exporters.resources_exporter.IDValidator", DummyValidator
-    )
     monkeypatch.setattr(
         "src.services.exporters.resources_exporter.get_fixed", lambda name: endpoint
     )
@@ -88,7 +65,6 @@ def test_resources_exporter_fetch_data_uses_validator(
     df = exporter.fetch_data(page_size=10)
 
     assert not df.empty
-    assert validated == [True]
 
 
 def test_resources_exporter_xlsx_export_writes_file(

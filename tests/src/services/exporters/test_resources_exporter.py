@@ -15,11 +15,6 @@ def test_xlsx_export(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr(res_module, "get_fixed", lambda name: FakeEndpoint(get=fake_get))
 
-    def fake_validate(self: object) -> None:
-        return None
-
-    monkeypatch.setattr(res_module.IDValidator, "validate", fake_validate)
-
     exporter = res_module.ResourcesExporter(category_id=1)
 
     def fake_to_excel(self: object, path: str | Path, index: bool = False) -> None:
