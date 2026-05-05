@@ -15,13 +15,14 @@ esac
 APP_BASE="elAPI_Plugins"
 APP_NAME="${APP_BASE}_${OS_ARCH}"
 ENTRYPOINT="gui/gui.py"
+BUILD_ENV=".pkg-build"
 
 # Clean previous build artefacts
-rm -rf .build build dist
+rm -rf "$BUILD_ENV" build dist
 
 # Fresh virtualenv for building
-python3 -m venv .build
-source .build/bin/activate
+python3 -m venv "$BUILD_ENV"
+source "$BUILD_ENV/bin/activate"
 python -m pip install --upgrade pip wheel setuptools
 pip install . pyinstaller
 
