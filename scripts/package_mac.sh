@@ -86,7 +86,7 @@ DATA_ARGS="$DATA_ARGS --add-data ${ELAPI_SUPPORTED_VERSIONS_DIR}:elapi/api/_supp
 
 # Optional icon
 ICON_ARG=""
-[ -f app.icns ] && ICON_ARG="--icon app.icns"
+[ -f gui/assets/app.icns ] && ICON_ARG="--icon gui/assets/app.icns"
 
 # Build the .app
 python -m PyInstaller --clean --windowed \
