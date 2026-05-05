@@ -19,18 +19,19 @@ $APP_BASE = "elAPI_Plugins"
 $APP_NAME = "${APP_BASE}_${Architecture}"
 $ENTRYPOINT = "gui/gui.py"
 $WINDOWS_ARCH = if ($Architecture -eq "x64") { "x86_64" } else { "x86" }
+$BUILD_ENV = ".pkg-build"
 
 Write-Host "Building $APP_NAME for Windows ($Architecture)" -ForegroundColor Cyan
 
 # Clean previous build artifacts
-if (Test-Path ".build") { Remove-Item -Path ".build" -Recurse -Force }
+if (Test-Path $BUILD_ENV) { Remove-Item -Path $BUILD_ENV -Recurse -Force }
 if (Test-Path "build") { Remove-Item -Path "build" -Recurse -Force }
 if (Test-Path "dist") { Remove-Item -Path "dist" -Recurse -Force }
 
 # Create fresh virtual environment for building
 Write-Host "Creating virtual environment..." -ForegroundColor Yellow
-python -m venv .build
-& .\.build\Scripts\Activate.ps1
+python -m venv $BUILD_ENV
+& ".\$BUILD_ENV\Scripts\Activate.ps1"
 
 # Upgrade pip and install build tools
 Write-Host "Installing build dependencies..." -ForegroundColor Yellow
