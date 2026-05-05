@@ -5,6 +5,10 @@
 
 set -euo pipefail
 
+# Always run from the project root regardless of where the script is invoked from
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/.."
+
 # Detect OS architecture (x86_64 or arm64)
 OS_ARCH=$(uname -m)
 case "$OS_ARCH" in
