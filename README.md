@@ -119,6 +119,7 @@ After launching, the GUI opens automatically in your default browser at `http://
 | **Export resources** | Select a category and download all matching resources as an `.xlsx` file. |
 | **Export experiments** | Download all experiments as an `.xlsx` file. |
 | **Import from CSV** | Upload a CSV file to create new entries or update existing ones. Select the target type, assign a category or template, and optionally enable update mode. |
+| **Download Templates** | Select a resource category or experiment template and download a blank, semicolon-delimited CSV pre-populated with the correct column headers, ready to fill in and re-import. |
 
 ### CSV format
 
@@ -145,10 +146,21 @@ When CSV import is used in update mode, you can place special marker values in i
 
 | Marker | Effect |
 |--------|--------|
-| `$delete_V` | Replaces that cell value with an empty value before the row is processed. |
-| `$delete_F` | Removes that column from the current row before the row is processed. |
+| `$delete_V` | Clears the existing value for that field. |
+| `$delete_F` | Removes the existing extra field from metadata. |
 
 These markers must match exactly. For example, `delete_V` or ` $delete_v ` are treated as normal text.
+
+The `title` column is read before markers are applied, so `$delete_V`/`$delete_F` in the `title` cell have no effect — the title is always sent as-is and can never be cleared or removed via these markers.
+
+### Downloading CSV templates
+
+The **Download Templates** tab generates an empty CSV skeleton for a chosen resource category or experiment template, so the columns always line up with that entry's extra fields.
+
+- **Resources**: columns are `title`, `tags`, `body`, followed by the extra fields defined in the category's metadata. Downloaded as `resource_<category id>_template.csv`.
+- **Experiments**: columns are `title`, `tags`, `date`, `status`, `body`, followed by the extra fields defined in the template's metadata. Downloaded as `experiment_<template id>_template.csv`.
+
+The file contains headers only (no data rows) and uses `;` as the delimiter. If the category/template's metadata can't be parsed, the extra-field columns are simply omitted and only the standard columns are included.
 
 ---
 

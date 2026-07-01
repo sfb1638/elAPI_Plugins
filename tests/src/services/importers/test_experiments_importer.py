@@ -392,7 +392,7 @@ def test_patch_existing_with_date(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
 def test_patch_existing_delete_V_clears_body(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """$delete_V in the body column results in body NOT included in the patch payload."""
+    """$delete_V in the body column clears the body in the patch payload."""
     captured: list[dict] = []
 
     def fake_patch(**kwargs: Any) -> FakeResponse:
@@ -410,7 +410,7 @@ def test_patch_existing_delete_V_clears_body(
     importer.patch_existing("1", importer.basic_df.iloc[0])
 
     assert len(captured) == 1
-    assert "body" not in captured[0]
+    assert captured[0]["body"] == ""
     assert captured[0]["title"] == "My Title"
 
 
@@ -439,10 +439,10 @@ def test_patch_existing_delete_F_removes_body_column(
     assert captured[0]["title"] == "My Title"
 
 
-def test_patch_existing_delete_V_extra_field_skipped(
+def test_patch_existing_delete_V_extra_field_is_cleared(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """$delete_V clears the extra field value to '', causing it to be skipped in post_extra_fields_from_row."""
+    """$delete_V clears the extra field value before metadata patching."""
     rows_received: list[pd.Series] = []
 
     def capturing_extra(eid: Any, row: pd.Series, **kwargs: Any) -> None:
@@ -483,6 +483,80 @@ def test_patch_existing_delete_F_extra_field_not_in_row(
     assert "Custom Field" not in rows_received[0].index
 
 
+def test_patch_existing_delete_V_clears_extra_field_metadata(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """$delete_V on an existing extra field patches its value to empty."""
+    metadata = {"extra_fields": {"Custom Field": {"value": "old"}}}
+
+    def fake_get(**kwargs: Any) -> FakeResponse:
+        return FakeResponse(json_data={"metadata": json.dumps(metadata)})
+
+    captured: list[dict[str, Any]] = []
+
+    def fake_patch(**kwargs: Any) -> FakeResponse:
+        data = kwargs.get("data")
+        if isinstance(data, dict):
+            captured.append(data)
+        return FakeResponse()
+
+    importer = _make_importer(
+        monkeypatch,
+        tmp_path,
+        ["title", "Custom Field"],
+        [["t", "$delete_V"]],
+        get=fake_get,
+        patch=fake_patch,
+    )
+
+    importer.patch_existing("1", importer.basic_df.iloc[0])
+
+    metadata_payloads = [data for data in captured if "metadata" in data]
+    assert metadata_payloads
+    patched_metadata = json.loads(metadata_payloads[-1]["metadata"])
+    assert patched_metadata["extra_fields"]["Custom Field"]["value"] == ""
+
+
+def test_patch_existing_delete_F_removes_extra_field_metadata(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """$delete_F on an existing extra field removes it from metadata."""
+    metadata = {
+        "extra_fields": {
+            "Custom Field": {"value": "old"},
+            "Keep Field": {"value": "keep"},
+        }
+    }
+
+    def fake_get(**kwargs: Any) -> FakeResponse:
+        return FakeResponse(json_data={"metadata": json.dumps(metadata)})
+
+    captured: list[dict[str, Any]] = []
+
+    def fake_patch(**kwargs: Any) -> FakeResponse:
+        data = kwargs.get("data")
+        if isinstance(data, dict):
+            captured.append(data)
+        return FakeResponse()
+
+    importer = _make_importer(
+        monkeypatch,
+        tmp_path,
+        ["title", "Custom Field", "Keep Field"],
+        [["t", "$delete_F", "new keep"]],
+        get=fake_get,
+        patch=fake_patch,
+    )
+
+    importer.patch_existing("1", importer.basic_df.iloc[0])
+
+    metadata_payloads = [data for data in captured if "metadata" in data]
+    assert metadata_payloads
+    patched_metadata = json.loads(metadata_payloads[-1]["metadata"])
+    assert "Custom Field" not in patched_metadata["extra_fields"]
+    assert patched_metadata["extra_fields"]["Keep Field"]["value"] == "new keep"
+
+
 def test_patch_existing_delete_V_multiple_columns(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -513,8 +587,8 @@ def test_patch_existing_delete_V_multiple_columns(
     assert len(rows_received) == 1
     assert rows_received[0]["Field A"] == ""
     assert rows_received[0]["Field B"] == "keep_me"
-    # body cleared → not in payload
-    assert all("body" not in d for d in captured)
+    # body cleared -> empty body payload
+    assert any(d.get("body") == "" for d in captured)
 
 
 def test_patch_existing_delete_F_multiple_columns(
@@ -568,8 +642,8 @@ def test_patch_existing_delete_V_and_delete_F_combined(
     importer.patch_existing("1", importer.basic_df.iloc[0])
 
     assert len(rows_received) == 1
-    # delete_V cleared body → not in payload
-    assert all("body" not in d for d in captured)
+    # delete_V cleared body -> empty body payload
+    assert any(d.get("body") == "" for d in captured)
     # delete_F dropped Field A
     assert "Field A" not in rows_received[0].index
     # Field B untouched
@@ -598,7 +672,7 @@ def test_patch_existing_delete_V_title_unaffected(
 
     assert len(captured) == 1
     assert captured[0]["title"] == "Real Title"
-    assert "body" not in captured[0]
+    assert captured[0]["body"] == ""
 
 
 def test_patch_existing_normal_values_unaffected_by_delete_markers(

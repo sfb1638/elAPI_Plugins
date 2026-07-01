@@ -774,6 +774,8 @@ class BaseImporter(ABC):
         entity_id: int | str,
         row: pd.Series,
         known_columns: Iterable[str] | None = None,
+        delete_value_columns: Iterable[str] | None = None,
+        delete_field_columns: Iterable[str] | None = None,
     ) -> None:
         """Match CSV extras to template fields, coerce, and patch metadata JSON."""
         eid = str(entity_id)
@@ -797,10 +799,46 @@ class BaseImporter(ABC):
             if c not in defs_by_canon:
                 defs_by_canon[c] = orig_key
 
+        known_canon = {canonicalize(x) for x in self._KNOWN_POST_FIELDS}
+        if known_columns:
+            known_canon |= {canonicalize(x) for x in known_columns}
+
+        def marker_keys(columns: Iterable[str] | None) -> set[str]:
+            return {
+                canonicalize(column)
+                for column in columns or []
+                if isinstance(column, str) and canonicalize(column) not in known_canon
+            }
+
+        delete_value_keys = marker_keys(delete_value_columns)
+        delete_field_keys = marker_keys(delete_field_columns)
+        marker_handled_keys = delete_value_keys | delete_field_keys
+
         csv_extras = self._collect_csv_extra_fields(row, known_columns=known_columns)
 
         changed: dict[str, Any] = {}
         link_ops: list[tuple[str, list[int]]] = []
+
+        for ckey in delete_field_keys:
+            real_key = defs_by_canon.get(ckey)
+            if real_key is None:
+                continue
+            del elab_extra_fields[real_key]
+            changed[real_key] = None
+
+        for ckey in delete_value_keys - delete_field_keys:
+            real_key = defs_by_canon.get(ckey)
+            if real_key is None:
+                continue
+            slot = elab_extra_fields.get(real_key)
+            if not isinstance(slot, dict):
+                elab_extra_fields[real_key] = {"value": ""}
+            else:
+                slot["value"] = ""
+            changed[real_key] = ""
+
+        for ckey in marker_handled_keys:
+            csv_extras.pop(ckey, None)
 
         for ckey, (orig_col, raw_val) in list(csv_extras.items()):
             if ckey not in self._LINK_COLUMN_MAP:

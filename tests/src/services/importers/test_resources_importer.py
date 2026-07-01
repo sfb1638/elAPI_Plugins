@@ -123,6 +123,84 @@ def test_patch_existing_preserves_extra_field_name_case(
     assert "mixed case field" not in patched_metadata["extra_fields"]
 
 
+def test_patch_existing_delete_V_clears_extra_field_metadata(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    metadata = {"extra_fields": {"Custom Field": {"value": "old"}}}
+
+    def fake_get(**kwargs: Any) -> FakeResponse:
+        return FakeResponse(json_data={"metadata": json.dumps(metadata)})
+
+    captured: list[dict[str, Any]] = []
+
+    def fake_patch(**kwargs: Any) -> FakeResponse:
+        data = kwargs.get("data")
+        if isinstance(data, dict):
+            captured.append(data)
+        return FakeResponse()
+
+    monkeypatch.setattr(
+        res_module,
+        "get_fixed",
+        lambda name: FakeEndpoint(get=fake_get, patch=fake_patch),
+    )
+
+    csv_path = write_csv(
+        tmp_path / "res.csv", ["title", "Custom Field"], [["t", "$delete_V"]]
+    )
+    importer = res_module.ResourcesImporter(csv_path)
+
+    importer.patch_existing("1", importer.basic_df.iloc[0])
+
+    metadata_payloads = [data for data in captured if "metadata" in data]
+    assert metadata_payloads
+    patched_metadata = json.loads(metadata_payloads[-1]["metadata"])
+    assert patched_metadata["extra_fields"]["Custom Field"]["value"] == ""
+
+
+def test_patch_existing_delete_F_removes_extra_field_metadata(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    metadata = {
+        "extra_fields": {
+            "Custom Field": {"value": "old"},
+            "Keep Field": {"value": "keep"},
+        }
+    }
+
+    def fake_get(**kwargs: Any) -> FakeResponse:
+        return FakeResponse(json_data={"metadata": json.dumps(metadata)})
+
+    captured: list[dict[str, Any]] = []
+
+    def fake_patch(**kwargs: Any) -> FakeResponse:
+        data = kwargs.get("data")
+        if isinstance(data, dict):
+            captured.append(data)
+        return FakeResponse()
+
+    monkeypatch.setattr(
+        res_module,
+        "get_fixed",
+        lambda name: FakeEndpoint(get=fake_get, patch=fake_patch),
+    )
+
+    csv_path = write_csv(
+        tmp_path / "res.csv",
+        ["title", "Custom Field", "Keep Field"],
+        [["t", "$delete_F", "new keep"]],
+    )
+    importer = res_module.ResourcesImporter(csv_path)
+
+    importer.patch_existing("1", importer.basic_df.iloc[0])
+
+    metadata_payloads = [data for data in captured if "metadata" in data]
+    assert metadata_payloads
+    patched_metadata = json.loads(metadata_payloads[-1]["metadata"])
+    assert "Custom Field" not in patched_metadata["extra_fields"]
+    assert patched_metadata["extra_fields"]["Keep Field"]["value"] == "new keep"
+
+
 def test_coerce_select_field() -> None:
     defn = {"type": "select", "allow_multi_values": True, "options": ["A", "B"]}
     coerced = res_module.ResourcesImporter._coerce_for_field(defn, "a, B")

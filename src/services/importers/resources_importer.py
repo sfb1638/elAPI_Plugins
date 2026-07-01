@@ -147,7 +147,9 @@ class ResourcesImporter(BaseImporter):
         body_col = self._find_col_like("body")
         if body_col and body_col in row:
             body_val = row[body_col]
-            if not pd.isna(body_val) and str(body_val).strip():
+            if body_col in vals_to_delete:
+                payload["body"] = ""
+            elif not pd.isna(body_val) and str(body_val).strip():
                 payload["body"] = str(body_val)
 
         if date := self._normalize_date(row):
@@ -191,7 +193,13 @@ class ResourcesImporter(BaseImporter):
         known = {canonicalize_field(name) for name in self._KNOWN_POST_FIELDS}
         if path_col:
             known.add(canonicalize_field(path_col))
-        self.post_extra_fields_from_row(resource_id, row, known_columns=known)
+        self.post_extra_fields_from_row(
+            resource_id,
+            row,
+            known_columns=known,
+            delete_value_columns=vals_to_delete,
+            delete_field_columns=fields_to_delete,
+        )
 
         logger.info("Patched resource %s", resource_id)
         self._patched_resources_counter += 1
