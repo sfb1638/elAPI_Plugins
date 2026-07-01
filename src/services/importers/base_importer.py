@@ -42,6 +42,9 @@ class BaseImporter(ABC):
     _template_id: int | str | None = None
     _default_category: str | None = None
 
+    # Cell-value prefix that renames an existing extra field: "$rename->New Name".
+    _RENAME_PREFIX: str = "$rename->"
+
     # Maps canonicalized CSV column headers to their elabFTW sub-endpoint names.
     _LINK_COLUMN_MAP: dict[str, str] = {
         canonicalize("experiments links"): "experiments_links",
@@ -808,6 +811,19 @@ class BaseImporter(ABC):
         except Exception as exc:
             logger.error("Failed to patch extra fields for id %s: %s", elab_id, exc)
 
+    @classmethod
+    def _extract_rename_map(cls, row: pd.Series) -> dict[str, str]:
+        """Map columns whose cell is a '$rename->New Name' marker to the new field name."""
+        rename_map: dict[str, str] = {}
+        for col, val in row.items():
+            if not isinstance(col, str) or not isinstance(val, str):
+                continue
+            if val.startswith(cls._RENAME_PREFIX):
+                new_name = val[len(cls._RENAME_PREFIX):].strip()
+                if new_name:
+                    rename_map[col] = new_name
+        return rename_map
+
     def post_extra_fields_from_row(
         self,
         entity_id: int | str,
@@ -815,6 +831,7 @@ class BaseImporter(ABC):
         known_columns: Iterable[str] | None = None,
         delete_value_columns: Iterable[str] | None = None,
         delete_field_columns: Iterable[str] | None = None,
+        rename_columns: dict[str, str] | None = None,
     ) -> None:
         """Match CSV extras to template fields, coerce, and patch metadata JSON."""
         eid = str(entity_id)
@@ -851,7 +868,17 @@ class BaseImporter(ABC):
 
         delete_value_keys = marker_keys(delete_value_columns)
         delete_field_keys = marker_keys(delete_field_columns)
-        marker_handled_keys = delete_value_keys | delete_field_keys
+
+        rename_ops: dict[str, str] = {}
+        for old_col, new_name in (rename_columns or {}).items():
+            if not isinstance(old_col, str):
+                continue
+            old_ckey = canonicalize(old_col)
+            if old_ckey in known_canon:
+                continue
+            rename_ops[old_ckey] = new_name
+
+        marker_handled_keys = delete_value_keys | delete_field_keys | set(rename_ops)
 
         csv_extras = self._collect_csv_extra_fields(row, known_columns=known_columns)
 
@@ -875,6 +902,28 @@ class BaseImporter(ABC):
             else:
                 slot["value"] = ""
             changed[real_key] = ""
+
+        for old_ckey, new_name in rename_ops.items():
+            real_key = defs_by_canon.get(old_ckey)
+            if real_key is None or real_key not in elab_extra_fields:
+                continue
+            new_canon = canonicalize(new_name)
+            collision = any(
+                canonicalize(k) == new_canon and k != real_key
+                for k in elab_extra_fields
+            )
+            if collision:
+                logger.warning(
+                    "Skipping rename of %r -> %r: target field already exists.",
+                    real_key,
+                    new_name,
+                )
+                continue
+            slot = elab_extra_fields.pop(real_key)
+            elab_extra_fields[new_name] = slot
+            defs_by_canon.pop(old_ckey, None)
+            defs_by_canon[new_canon] = new_name
+            changed[new_name] = slot.get("value") if isinstance(slot, dict) else slot
 
         for ckey in marker_handled_keys:
             csv_extras.pop(ckey, None)

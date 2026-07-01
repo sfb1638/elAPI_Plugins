@@ -557,6 +557,133 @@ def test_patch_existing_delete_F_removes_extra_field_metadata(
     assert patched_metadata["extra_fields"]["Keep Field"]["value"] == "new keep"
 
 
+def test_patch_existing_rename_extra_field(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """'$rename->New Name' renames the field key while preserving value and definition."""
+    metadata = {
+        "extra_fields": {
+            "Custom Field": {"value": "keepme", "type": "text", "group_id": 3},
+        }
+    }
+
+    def fake_get(**kwargs: Any) -> FakeResponse:
+        return FakeResponse(json_data={"metadata": json.dumps(metadata)})
+
+    captured: list[dict[str, Any]] = []
+
+    def fake_patch(**kwargs: Any) -> FakeResponse:
+        data = kwargs.get("data")
+        if isinstance(data, dict):
+            captured.append(data)
+        return FakeResponse()
+
+    importer = _make_importer(
+        monkeypatch,
+        tmp_path,
+        ["title", "Custom Field"],
+        [["t", "$rename->New Name"]],
+        get=fake_get,
+        patch=fake_patch,
+    )
+
+    importer.patch_existing("1", importer.basic_df.iloc[0])
+
+    metadata_payloads = [data for data in captured if "metadata" in data]
+    assert metadata_payloads
+    fields = json.loads(metadata_payloads[-1]["metadata"])["extra_fields"]
+    assert "Custom Field" not in fields
+    assert fields["New Name"] == {"value": "keepme", "type": "text", "group_id": 3}
+
+
+def test_patch_existing_rename_collision_is_skipped(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Renaming onto an existing field name is skipped; neither field is clobbered."""
+    metadata = {
+        "extra_fields": {
+            "Custom Field": {"value": "a"},
+            "Target": {"value": "b"},
+        }
+    }
+
+    def fake_get(**kwargs: Any) -> FakeResponse:
+        return FakeResponse(json_data={"metadata": json.dumps(metadata)})
+
+    captured: list[dict[str, Any]] = []
+
+    def fake_patch(**kwargs: Any) -> FakeResponse:
+        data = kwargs.get("data")
+        if isinstance(data, dict):
+            captured.append(data)
+        return FakeResponse()
+
+    importer = _make_importer(
+        monkeypatch,
+        tmp_path,
+        ["title", "Custom Field"],
+        [["t", "$rename->Target"]],
+        get=fake_get,
+        patch=fake_patch,
+    )
+
+    importer.patch_existing("1", importer.basic_df.iloc[0])
+
+    fields = json.loads(
+        [d for d in captured if "metadata" in d][-1]["metadata"]
+    )["extra_fields"]
+    assert fields["Custom Field"] == {"value": "a"}
+    assert fields["Target"] == {"value": "b"}
+
+
+def test_patch_existing_rename_nonexistent_field_noop(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Renaming a field that the entity does not have leaves metadata unchanged."""
+    metadata = {"extra_fields": {"Keep": {"value": "v"}}}
+
+    def fake_get(**kwargs: Any) -> FakeResponse:
+        return FakeResponse(json_data={"metadata": json.dumps(metadata)})
+
+    captured: list[dict[str, Any]] = []
+
+    def fake_patch(**kwargs: Any) -> FakeResponse:
+        data = kwargs.get("data")
+        if isinstance(data, dict):
+            captured.append(data)
+        return FakeResponse()
+
+    importer = _make_importer(
+        monkeypatch,
+        tmp_path,
+        ["title", "Missing Field"],
+        [["t", "$rename->Whatever"]],
+        get=fake_get,
+        patch=fake_patch,
+    )
+
+    importer.patch_existing("1", importer.basic_df.iloc[0])
+
+    payloads = [d for d in captured if "metadata" in d]
+    if payloads:
+        fields = json.loads(payloads[-1]["metadata"])["extra_fields"]
+        assert fields == {"Keep": {"value": "v"}}
+
+
+def test_extract_rename_map_requires_exact_prefix() -> None:
+    """Only cells starting exactly with '$rename->' are treated as rename markers."""
+    row = pd.Series(
+        {
+            "A": "$rename->New A",
+            "B": " $rename->spaced",
+            "C": "rename->no dollar",
+            "D": "$rename->",
+            "E": "normal",
+        }
+    )
+    assert exp_module.ExperimentsImporter._extract_rename_map(row) == {"A": "New A"}
+
+
 def test_patch_existing_delete_V_multiple_columns(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

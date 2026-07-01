@@ -141,8 +141,11 @@ class ExperimentsImporter(BaseImporter):
 
         vals_to_delete = row[row == "$delete_V"].index.tolist()
         fields_to_delete = row[row == "$delete_F"].index.tolist()
+        rename_map = self._extract_rename_map(row)
 
         row[vals_to_delete] = ""
+        if rename_map:
+            row[list(rename_map.keys())] = ""
         row.drop(fields_to_delete, inplace=True)
 
         existing_json = self.get_existing_json(experiment_id)
@@ -205,6 +208,7 @@ class ExperimentsImporter(BaseImporter):
             known_columns=known,
             delete_value_columns=vals_to_delete,
             delete_field_columns=fields_to_delete,
+            rename_columns=rename_map,
         )
 
         logger.info("Patched experiment %s", experiment_id)

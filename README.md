@@ -140,6 +140,19 @@ The importer automatically detects delimiters and encoding. Column names are mat
 
 Any additional columns are matched against the extra fields defined in the entry's template and updated accordingly.
 
+### Update behavior
+
+When updating an existing entry, columns are applied with different semantics:
+
+| Field | Behavior |
+|-------|----------|
+| `title` | **Overwritten** with the new value. |
+| Extra (template) fields | **Overwritten** with the new value. |
+| `body` | **Appended** — the new text is added after the existing body (kept, not replaced). |
+| `tags` | **Appended** — new tags are added to the existing ones; tags already present are skipped. |
+| `attachments` / `files_path` | **Appended** — new files are uploaded alongside existing attachments. |
+| `experiments links` / `resources links` | **Appended** — new links are added; existing links are kept. |
+
 ### Update markers
 
 When CSV import is used in update mode, you can place special marker values in individual cells:
@@ -148,8 +161,11 @@ When CSV import is used in update mode, you can place special marker values in i
 |--------|--------|
 | `$delete_V` | Clears the existing value for that field. |
 | `$delete_F` | Removes the existing extra field from metadata. |
+| `$rename->New Name` | Renames the existing extra field to `New Name`, keeping its value and definition. |
 
-These markers must match exactly. For example, `delete_V` or ` $delete_v ` are treated as normal text.
+`$delete_V` and `$delete_F` must match exactly. For example, `delete_V` or ` $delete_v ` are treated as normal text.
+
+For renaming, place `$rename->New Name` in the cell under the column whose header is the field's **current** name; everything after `->` becomes the new field name (surrounding whitespace is trimmed). The cell is consumed by the rename, so it does not also set a value. If a field named `New Name` already exists, the rename is skipped (the existing field is not overwritten).
 
 The `title` column is read before markers are applied, so `$delete_V`/`$delete_F` in the `title` cell have no effect — the title is always sent as-is and can never be cleared or removed via these markers.
 
