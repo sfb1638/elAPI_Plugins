@@ -357,6 +357,9 @@ def test_patch_existing_with_string_metadata(monkeypatch: pytest.MonkeyPatch, tm
 
     assert len(captured) >= 1
     assert "metadata" in captured[0]
+    patched_metadata = json.loads(captured[0]["metadata"])
+    assert "Field1" in patched_metadata["extra_fields"]
+    assert "field1" not in patched_metadata["extra_fields"]
 
 
 def test_patch_existing_with_date(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

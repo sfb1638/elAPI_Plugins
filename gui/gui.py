@@ -328,10 +328,10 @@ def index() -> str | WerkzeugResponse:
                 extra_cols = list(meta.get("extra_fields", {}).keys())
             except Exception:
                 extra_cols = []
-            standard_cols = ["title", "tags", "category", "template", "main text"]
+            standard_cols = ["title", "tags", "body"]
             columns = standard_cols + extra_cols
             buf = io.StringIO()
-            pd.DataFrame(columns=columns).to_csv(buf, index=False)
+            pd.DataFrame(columns=columns).to_csv(buf, index=False, sep=";")
             buf.seek(0)
             return send_file(
                 io.BytesIO(buf.getvalue().encode()),
@@ -350,11 +350,11 @@ def index() -> str | WerkzeugResponse:
             except Exception:
                 extra_cols = []
 
-            standard_cols = ["title", "tags", "date", "status", "main text"]
+            standard_cols = ["title", "tags", "date", "status", "body"]
             columns = standard_cols + extra_cols
 
             buf = io.StringIO()
-            pd.DataFrame(columns=columns).to_csv(buf, index=False)
+            pd.DataFrame(columns=columns).to_csv(buf, index=False, sep=";")
             buf.seek(0)
             return send_file(
                 io.BytesIO(buf.getvalue().encode()),

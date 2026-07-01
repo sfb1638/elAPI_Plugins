@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -85,6 +86,41 @@ def test_post_extra_fields_from_row(
     importer.post_extra_fields_from_row("1", row, known_columns={"title"})
 
     assert "metadata" in captured["data"]
+
+
+def test_patch_existing_preserves_extra_field_name_case(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    metadata = {"extra_fields": {"Mixed Case Field": {"value": "old"}}}
+
+    def fake_get(**kwargs: Any) -> FakeResponse:
+        return FakeResponse(json_data={"metadata": metadata})
+
+    captured: list[dict[str, Any]] = []
+
+    def fake_patch(**kwargs: Any) -> FakeResponse:
+        data = kwargs.get("data")
+        if isinstance(data, dict):
+            captured.append(data)
+        return FakeResponse()
+
+    monkeypatch.setattr(
+        res_module,
+        "get_fixed",
+        lambda name: FakeEndpoint(get=fake_get, patch=fake_patch),
+    )
+
+    csv_path = write_csv(tmp_path / "res.csv", ["title"], [["t"]])
+    importer = res_module.ResourcesImporter(csv_path)
+    monkeypatch.setattr(importer, "post_extra_fields_from_row", lambda *a, **kw: None)
+
+    importer.patch_existing("1", importer.basic_df.iloc[0])
+
+    metadata_payloads = [data for data in captured if "metadata" in data]
+    assert metadata_payloads
+    patched_metadata = json.loads(metadata_payloads[0]["metadata"])
+    assert "Mixed Case Field" in patched_metadata["extra_fields"]
+    assert "mixed case field" not in patched_metadata["extra_fields"]
 
 
 def test_coerce_select_field() -> None:

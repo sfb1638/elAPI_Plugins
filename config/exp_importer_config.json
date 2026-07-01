@@ -1,5 +1,5 @@
 {
-  "known_post_fields": ["title", "tags", "category", "status", "template", "date", "main text"],
+  "known_post_fields": ["title", "tags", "category", "status", "template", "date", "body"],
   "path_col": [
     "files_path",
     "file_path",

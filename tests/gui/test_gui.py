@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import io
 from pathlib import Path
 from typing import Any
@@ -129,6 +130,111 @@ def test_export_experiments(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
     client = gui.app.test_client()
     resp = client.post("/", data={"export_type": "experiments"})
     assert resp.status_code == 200
+
+
+def test_download_resource_template_omits_category_and_template_columns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_get_fixed(name: str) -> FakeEndpoint:
+        if name == "categories":
+            def get_category(**kwargs: object) -> FakeResponse:
+                if kwargs.get("endpoint_id") == 1:
+                    return FakeResponse(
+                        json_data={
+                            "id": 1,
+                            "metadata": '{"extra_fields": {"strain": {}, "plasmid": {}}}',
+                        }
+                    )
+                return FakeResponse(json_data={"data": [{"id": 1, "title": "Cells"}]})
+
+            return FakeEndpoint(get=get_category)
+
+        if name == "resources":
+            return FakeEndpoint(
+                get=lambda **kwargs: FakeResponse(
+                    json_data={"data": [{"category": 1, "category_title": "Cells"}]}
+                )
+            )
+
+        return FakeEndpoint(get=lambda **kwargs: FakeResponse(json_data={"data": []}))
+
+    monkeypatch.setattr(gui.endpoints, "get_fixed", fake_get_fixed)
+    monkeypatch.setattr(
+        gui,
+        "paged_fetch",
+        lambda get_page, **kwargs: get_page(
+            limit=kwargs["page_size"], offset=kwargs["start_offset"]
+        ),
+    )
+
+    gui.app.testing = True
+    client = gui.app.test_client()
+    resp = client.post("/", data={"export_type": "template_resources", "category": "1"})
+
+    assert resp.status_code == 200
+    raw_csv = resp.get_data(as_text=True)
+    assert raw_csv.startswith("title;tags;body;")
+    rows = list(csv.reader(io.StringIO(raw_csv), delimiter=";"))
+    assert rows[0] == ["title", "tags", "body", "strain", "plasmid"]
+    assert "category" not in rows[0]
+    assert "template" not in rows[0]
+    assert "main text" not in rows[0]
+
+
+def test_download_experiment_template_uses_body_column(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_get_fixed(name: str) -> FakeEndpoint:
+        if name == "categories":
+            return FakeEndpoint(
+                get=lambda **kwargs: FakeResponse(
+                    json_data={"data": [{"id": 1, "title": "Cells"}]}
+                )
+            )
+
+        if name == "resources":
+            return FakeEndpoint(
+                get=lambda **kwargs: FakeResponse(
+                    json_data={"data": [{"category": 1, "category_title": "Cells"}]}
+                )
+            )
+
+        if name == "experiments_templates":
+            def get_template(**kwargs: object) -> FakeResponse:
+                if kwargs.get("endpoint_id") == 7:
+                    return FakeResponse(
+                        json_data={
+                            "id": 7,
+                            "metadata": '{"extra_fields": {"temperature": {}}}',
+                        }
+                    )
+                return FakeResponse(json_data={"data": [{"id": 7, "title": "Assay"}]})
+
+            return FakeEndpoint(get=get_template)
+
+        return FakeEndpoint(get=lambda **kwargs: FakeResponse(json_data={"data": []}))
+
+    monkeypatch.setattr(gui.endpoints, "get_fixed", fake_get_fixed)
+    monkeypatch.setattr(
+        gui,
+        "paged_fetch",
+        lambda get_page, **kwargs: get_page(
+            limit=kwargs["page_size"], offset=kwargs["start_offset"]
+        ),
+    )
+
+    gui.app.testing = True
+    client = gui.app.test_client()
+    resp = client.post(
+        "/", data={"export_type": "template_experiments", "exp_template_id": "7"}
+    )
+
+    assert resp.status_code == 200
+    raw_csv = resp.get_data(as_text=True)
+    assert raw_csv.startswith("title;tags;date;status;body;")
+    rows = list(csv.reader(io.StringIO(raw_csv), delimiter=";"))
+    assert rows[0] == ["title", "tags", "date", "status", "body", "temperature"]
+    assert "main text" not in rows[0]
 
 
 def test_import_resources_from_path(

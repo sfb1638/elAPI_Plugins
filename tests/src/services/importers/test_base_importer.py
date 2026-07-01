@@ -68,6 +68,16 @@ def test_find_col_like() -> None:
     assert imp._find_col_like("title") == "Title"
 
 
+def test_find_path_col_is_case_and_whitespace_insensitive() -> None:
+    df = pd.DataFrame({"Files Path": ["folder"], "Title": ["y"]})
+    imp = DummyImporter(df)
+    assert imp._find_path_col() == "Files Path"
+
+    df = pd.DataFrame({"ATTACHMENTS": ["folder"], "Title": ["y"]})
+    imp = DummyImporter(df)
+    assert imp._find_path_col() == "ATTACHMENTS"
+
+
 def test_resolve_folder_with_base(tmp_path: Path) -> None:
     df = pd.DataFrame({"id": [1]})
     imp = DummyImporter(df, files_base_dir=tmp_path)

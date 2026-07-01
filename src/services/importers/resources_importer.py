@@ -164,8 +164,7 @@ class ResourcesImporter(BaseImporter):
         else:
             metadata = raw_metadata
 
-        extra_fields = metadata.setdefault("extra_fields", {})
-        metadata["extra_fields"] = {k.lower(): v for k, v in extra_fields.items()}
+        metadata.setdefault("extra_fields", {})
 
         metadata_str = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
         payload["metadata"] = metadata_str

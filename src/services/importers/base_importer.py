@@ -113,8 +113,16 @@ class BaseImporter(ABC):
 
     def _find_path_col(self) -> str | None:
         """Find a column name that matches any known file path aliases."""
+        path_aliases = {
+            canonicalize(alias).replace("_", "") for alias in CONFIG["path_col"]
+        }
         return next(
-            (col for col in self.cols_canon.values() if col in CONFIG["path_col"]), None
+            (
+                original
+                for canon_col, original in self.cols_canon.items()
+                if canon_col.replace("_", "") in path_aliases
+            ),
+            None,
         )
 
     def _find_entity_id_col(self, keyword: str) -> str | None:
@@ -736,10 +744,11 @@ class BaseImporter(ABC):
         extra_map = self.fetch_extra_fields_mapping(existing)
         if not extra_map:
             return
+        known_canon = {canonicalize(column) for column in known_columns}
         updated_fields: list[str] = []
         for column in row.index:
             canon_col = canonicalize(column)
-            if canon_col in extra_map and canon_col not in known_columns:
+            if canon_col in extra_map and canon_col not in known_canon:
                 value = row[column]
                 if pd.isna(value):
                     val_str = ""
