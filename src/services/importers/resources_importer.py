@@ -144,18 +144,23 @@ class ResourcesImporter(BaseImporter):
         row[vals_to_delete] = ""
         row.drop(fields_to_delete, inplace=True)
 
+        existing_json = self.get_existing_json(resource_id)
+
         body_col = self._find_col_like("body")
         if body_col and body_col in row:
             body_val = row[body_col]
             if body_col in vals_to_delete:
                 payload["body"] = ""
             elif not pd.isna(body_val) and str(body_val).strip():
-                payload["body"] = str(body_val)
+                new_body = str(body_val)
+                existing_body = existing_json.get("body") or ""
+                payload["body"] = (
+                    f"{existing_body}\n{new_body}" if existing_body else new_body
+                )
 
         if date := self._normalize_date(row):
             payload["date"] = date
 
-        existing_json = self.get_existing_json(resource_id)
         raw_metadata = existing_json.get("metadata") or {}
 
         if isinstance(raw_metadata, str):
@@ -177,7 +182,9 @@ class ResourcesImporter(BaseImporter):
             response.raise_for_status()
 
         tags_list = self._get_tags(row)
-        self.replace_tags(resource_id, tags_list)
+        self.append_tags(
+            resource_id, tags_list, existing_tags=existing_json.get("tags")
+        )
 
         path_col = self._find_path_col()
         if path_col and path_col in row:

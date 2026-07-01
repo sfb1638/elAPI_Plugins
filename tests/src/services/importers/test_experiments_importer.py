@@ -706,10 +706,10 @@ def test_patch_existing_normal_values_unaffected_by_delete_markers(
     assert any(d.get("body") == "some body text" for d in captured)
 
 
-def test_patch_existing_delete_V_tags_cleared(
+def test_patch_existing_delete_V_tags_no_new_tags(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """$delete_V on the tags column causes replace_tags to be called with an empty list."""
+    """$delete_V on the tags column adds no new tags (existing tags are kept)."""
     tag_calls: list[list[str]] = []
 
     importer = _make_importer(
@@ -718,7 +718,9 @@ def test_patch_existing_delete_V_tags_cleared(
         [["t", "$delete_V"]],
     )
     monkeypatch.setattr(importer, "post_extra_fields_from_row", lambda *a, **kw: None)
-    monkeypatch.setattr(importer, "replace_tags", lambda rid, tags: tag_calls.append(tags))
+    monkeypatch.setattr(
+        importer, "append_tags", lambda rid, tags, **kw: tag_calls.append(tags)
+    )
 
     importer.patch_existing("1", importer.basic_df.iloc[0])
 
@@ -729,7 +731,7 @@ def test_patch_existing_delete_V_tags_cleared(
 def test_patch_existing_delete_F_tags_column_dropped(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """$delete_F on the tags column drops it; replace_tags is called with an empty list."""
+    """$delete_F on the tags column drops it; append_tags is called with an empty list."""
     tag_calls: list[list[str]] = []
 
     importer = _make_importer(
@@ -738,12 +740,104 @@ def test_patch_existing_delete_F_tags_column_dropped(
         [["t", "$delete_F"]],
     )
     monkeypatch.setattr(importer, "post_extra_fields_from_row", lambda *a, **kw: None)
-    monkeypatch.setattr(importer, "replace_tags", lambda rid, tags: tag_calls.append(tags))
+    monkeypatch.setattr(
+        importer, "append_tags", lambda rid, tags, **kw: tag_calls.append(tags)
+    )
 
     importer.patch_existing("1", importer.basic_df.iloc[0])
 
     assert len(tag_calls) == 1
     assert tag_calls[0] == []
+
+
+def test_patch_existing_body_appends_to_existing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A new body value is appended to the existing body, not overwritten."""
+    captured: dict[str, Any] = {}
+
+    def fake_get(**kwargs: Any) -> FakeResponse:
+        return FakeResponse(
+            json_data={"body": "<p>old</p>", "metadata": {"extra_fields": {}}}
+        )
+
+    def fake_patch(**kwargs: Any) -> FakeResponse:
+        data = kwargs.get("data")
+        if isinstance(data, dict) and "body" in data:
+            captured["body"] = data["body"]
+        return FakeResponse()
+
+    monkeypatch.setattr(
+        exp_module,
+        "get_fixed",
+        lambda name: FakeEndpoint(get=fake_get, patch=fake_patch),
+    )
+    csv_path = write_csv(tmp_path / "exp.csv", ["title", "body"], [["t", "new text"]])
+    importer = exp_module.ExperimentsImporter(csv_path)
+    monkeypatch.setattr(importer, "post_extra_fields_from_row", lambda *a, **kw: None)
+    monkeypatch.setattr(importer, "append_tags", lambda *a, **kw: None)
+
+    importer.patch_existing("1", importer.basic_df.iloc[0])
+
+    assert captured["body"] == "<p>old</p>\nnew text"
+
+
+def test_patch_existing_tags_appended_keeping_existing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """New tags are appended via append_tags; the existing tag string is passed through."""
+    calls: list[dict[str, Any]] = []
+
+    def fake_get(**kwargs: Any) -> FakeResponse:
+        return FakeResponse(
+            json_data={"tags": "keep1|keep2", "metadata": {"extra_fields": {}}}
+        )
+
+    monkeypatch.setattr(
+        exp_module,
+        "get_fixed",
+        lambda name: FakeEndpoint(get=fake_get, patch=lambda **kw: FakeResponse()),
+    )
+    csv_path = write_csv(tmp_path / "exp.csv", ["title", "tags"], [["t", "keep1,new"]])
+    importer = exp_module.ExperimentsImporter(csv_path)
+    monkeypatch.setattr(importer, "post_extra_fields_from_row", lambda *a, **kw: None)
+    monkeypatch.setattr(
+        importer,
+        "append_tags",
+        lambda rid, tags, **kw: calls.append({"tags": tags, "kw": kw}),
+    )
+
+    importer.patch_existing("1", importer.basic_df.iloc[0])
+
+    assert len(calls) == 1
+    assert calls[0]["tags"] == ["keep1", "new"]
+    assert calls[0]["kw"]["existing_tags"] == "keep1|keep2"
+
+
+def test_append_tags_skips_existing_and_posts_new(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """append_tags posts only tags not already present, without clearing existing ones."""
+    posted: list[str] = []
+    deleted: list[Any] = []
+
+    def fake_post(**kwargs: Any) -> FakeResponse:
+        posted.append(kwargs["data"]["tag"])
+        return FakeResponse()
+
+    def fake_delete(**kwargs: Any) -> FakeResponse:
+        deleted.append(kwargs)
+        return FakeResponse()
+
+    importer = _make_importer(
+        monkeypatch, tmp_path, ["title"], [["t"]],
+        post=fake_post, delete=fake_delete,
+    )
+
+    importer.append_tags("1", ["keep", "new1", "new2"], existing_tags="keep|other")
+
+    assert posted == ["new1", "new2"]
+    assert deleted == []
 
 
 def test_patch_existing_delete_V_does_not_match_partial(

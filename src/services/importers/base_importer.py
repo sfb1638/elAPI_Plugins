@@ -668,24 +668,28 @@ class BaseImporter(ABC):
 
     # region --- ElabFTW writes ---
 
-    def replace_tags(self, resource_id: int | str, tags: list[str]) -> None:
-        """Replace tags using the /{entity}/{id}/tags sub-endpoint."""
-        rid = str(resource_id)
-        if not rid.isdigit():
-            raise ValueError(f"Invalid resource id: {resource_id!r}")
-
+    @staticmethod
+    def _normalize_tags(tags: list[str]) -> list[str]:
+        """Strip, drop blanks, and de-duplicate a list of tags (order-preserving)."""
         normalized: list[str] = []
         seen: set[str] = set()
         for t in tags:
             if t is None:
                 continue
             s = str(t).strip()
-            if not s:
+            if not s or s in seen:
                 continue
-            if s not in seen:
-                seen.add(s)
-                normalized.append(s)
+            seen.add(s)
+            normalized.append(s)
+        return normalized
 
+    def replace_tags(self, resource_id: int | str, tags: list[str]) -> None:
+        """Replace tags using the /{entity}/{id}/tags sub-endpoint."""
+        rid = str(resource_id)
+        if not rid.isdigit():
+            raise ValueError(f"Invalid resource id: {resource_id!r}")
+
+        normalized = self._normalize_tags(tags)
         if not normalized:
             return
 
@@ -696,6 +700,41 @@ class BaseImporter(ABC):
                 resp.raise_for_status()
         except Exception as exc:
             logger.warning("Could not clear existing tags for %s: %s", rid, exc)
+
+        for tag in normalized:
+            resp = self.endpoint.post(
+                endpoint_id=rid,
+                sub_endpoint_name="tags",
+                data={"tag": tag},
+            )
+            resp.raise_for_status()
+
+    def append_tags(
+        self,
+        resource_id: int | str,
+        tags: list[str],
+        existing_tags: str | None = None,
+    ) -> None:
+        """Add tags via the /{entity}/{id}/tags sub-endpoint, keeping existing ones.
+
+        ``existing_tags`` is the pipe-separated tag string from the entity JSON;
+        tags already present are skipped to avoid duplicates.
+        """
+        rid = str(resource_id)
+        if not rid.isdigit():
+            raise ValueError(f"Invalid resource id: {resource_id!r}")
+
+        already_present: set[str] = set()
+        if existing_tags:
+            already_present = {
+                t.strip() for t in str(existing_tags).split("|") if t.strip()
+            }
+
+        normalized = [
+            t for t in self._normalize_tags(tags) if t not in already_present
+        ]
+        if not normalized:
+            return
 
         for tag in normalized:
             resp = self.endpoint.post(
