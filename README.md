@@ -45,6 +45,15 @@ The project is developed as part of the **INF Project** of [CRC 1638](https://ww
 - Intelligent column matching: handles non-breaking spaces, tabs, and case variations
 - Automatic delimiter detection for CSV files (comma, semicolon, tab, pipe)
 
+### CSV Templates
+
+- Download a pre-filled CSV template for any resource category or experiment template
+- Templates include all standard columns plus the extra fields defined in the eLabFTW template, ready to fill in and re-import
+
+### Automatic Updates
+
+- The application checks for new releases on GitHub at startup and displays a notification banner when an update is available
+
 ---
 
 ## Prerequisites
@@ -118,6 +127,8 @@ After launching, the GUI opens automatically in your default browser at `http://
 |--------|-------------|
 | **Export resources** | Select a category and download all matching resources as an `.xlsx` file. |
 | **Export experiments** | Download all experiments as an `.xlsx` file. |
+| **Download resource template** | Select a resource category and download a blank CSV with all standard and extra-field columns for that category. |
+| **Download experiment template** | Select an experiment template and download a blank CSV with all standard and extra-field columns for that template. |
 | **Import from CSV** | Upload a CSV file to create new entries or update existing ones. Select the target type, assign a category or template, and optionally enable update mode. |
 | **Download Templates** | Select a resource category or experiment template and download a blank, semicolon-delimited CSV pre-populated with the correct column headers, ready to fill in and re-import. |
 
@@ -188,6 +199,7 @@ src/
   services/
     importers/        CSV-to-eLabFTW import logic (resources, experiments)
     exporters/        eLabFTW-to-Excel export logic
+  updater/            GitHub release checker and asset downloader
   utils/              Shared utilities (CSV parsing, endpoints, logging)
 gui/                  Flask-based web GUI
 config/               Runtime configuration files
