@@ -34,6 +34,11 @@ except json.JSONDecodeError as exc:
 logger = logging.getLogger(__name__)
 
 
+def link_key(name: str) -> str:
+    """Canonicalize a column header for link matching (spaces/underscores ignored)."""
+    return canonicalize(name).replace("_", "")
+
+
 class BaseImporter(ABC):
     """Shared helpers for importer subclasses (ids, columns, tags, files, extras)."""
 
@@ -43,15 +48,18 @@ class BaseImporter(ABC):
     _default_category: str | None = None
 
     # Cell-value prefix that renames an existing extra field: "$rename->New Name".
-    _RENAME_PREFIX: str = "$rename->"
+    _RENAME_PREFIX: str = "$rename$"
 
-    # Maps canonicalized CSV column headers to their elabFTW sub-endpoint names.
+    # Maps link column headers to their elabFTW sub-endpoint names. Keys are
+    # normalized with link_key(), so spaces and underscores are interchangeable
+    # ("experiments links", "Experiments_Links", "experimentslinks" all match).
     _LINK_COLUMN_MAP: dict[str, str] = {
-        canonicalize("experiments links"): "experiments_links",
-        canonicalize("experiment link"): "experiments_links",
-        canonicalize("resources link"): "items_links",
-        canonicalize("resources links"): "items_links",
-        canonicalize("items links"): "items_links",
+        link_key("experiments links"): "experiments_links",
+        link_key("experiment link"): "experiments_links",
+        link_key("resources link"): "items_links",
+        link_key("resources links"): "items_links",
+        link_key("items links"): "items_links",
+        link_key("item link"): "items_links",
     }
 
     # region --- Abstract interface ---
@@ -929,12 +937,18 @@ class BaseImporter(ABC):
             csv_extras.pop(ckey, None)
 
         for ckey, (orig_col, raw_val) in list(csv_extras.items()):
-            if ckey not in self._LINK_COLUMN_MAP:
+            target_key = self._LINK_COLUMN_MAP.get(link_key(orig_col))
+            if target_key is None:
                 continue
 
-            target_key = self._LINK_COLUMN_MAP[ckey]
             link_ids = self._parse_link_ids(raw_val)
             if not link_ids:
+                logger.warning(
+                    "Link column %r has no usable numeric ids (value %r); "
+                    "no links created.",
+                    orig_col,
+                    raw_val,
+                )
                 continue
 
             del csv_extras[ckey]
