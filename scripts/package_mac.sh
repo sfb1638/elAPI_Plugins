@@ -102,18 +102,31 @@ if command -v codesign >/dev/null 2>&1; then
   codesign --deep --force --sign - "dist/${APP_NAME}.app" || true
 fi
 
-# Sanity check: ensure supported versions JSONs are inside the bundle
-if [ ! -d "dist/${APP_NAME}.app/Contents/Frameworks/elapi/api/_supported_versions" ]; then
+# Sanity check: ensure supported-versions JSONs are inside the bundle. Depending on
+# the PyInstaller version, --add-data may land under Contents/Frameworks or
+# Contents/Resources, so accept either.
+SUPPORTED_VERSIONS_DIR=""
+for candidate in \
+  "dist/${APP_NAME}.app/Contents/Frameworks/elapi/api/_supported_versions" \
+  "dist/${APP_NAME}.app/Contents/Resources/elapi/api/_supported_versions"; do
+  if [ -d "$candidate" ]; then
+    SUPPORTED_VERSIONS_DIR="$candidate"
+    break
+  fi
+done
+
+if [ -z "$SUPPORTED_VERSIONS_DIR" ]; then
   echo "ERROR: Bundle missing elapi/api/_supported_versions inside .app" >&2
-  echo "Expected: dist/${APP_NAME}.app/Contents/Frameworks/elapi/api/_supported_versions" >&2
+  echo "Looked under Contents/Frameworks and Contents/Resources" >&2
   exit 1
 fi
 
-echo "🔎 Bundled supported versions:"
-ls -la "dist/${APP_NAME}.app/Contents/Frameworks/elapi/api/_supported_versions" || true
+echo "🔎 Bundled supported versions ($SUPPORTED_VERSIONS_DIR):"
+ls -la "$SUPPORTED_VERSIONS_DIR" || true
 
 cd dist
-DMG_NAME="${APP_NAME}-macOS.dmg"
+# Name matches the download instructions in README.md (e.g. elAPI_Plugins_arm64.dmg).
+DMG_NAME="${APP_NAME}.dmg"
 hdiutil create -volname "$APP_BASE" \
   -srcfolder "${APP_NAME}.app" \
   -ov -format UDZO "$DMG_NAME"

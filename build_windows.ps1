@@ -1,7 +1,7 @@
 # Build a self-contained Windows .exe for ELAPI GUI.
 # Includes elapi/VERSION and elapi/api/_supported_versions so elapi can determine
 # its version and supported endpoints at runtime.
-# Windows PowerShell equivalent of build.sh (macOS)
+# Windows PowerShell equivalent of scripts/package_mac.sh (macOS)
 
 param(
     [string]$Architecture = "x64"  # x64 or x86
@@ -18,7 +18,6 @@ if ($Architecture -notmatch "^(x64|x86)$") {
 $APP_BASE = "elAPI_Plugins"
 $APP_NAME = "${APP_BASE}_${Architecture}"
 $ENTRYPOINT = "gui/gui.py"
-$WINDOWS_ARCH = if ($Architecture -eq "x64") { "x86_64" } else { "x86" }
 $BUILD_ENV = ".pkg-build"
 
 Write-Host "Building $APP_NAME for Windows ($Architecture)" -ForegroundColor Cyan
@@ -111,11 +110,14 @@ if (Test-Path "config") {
     $DATA_ARGS += "--add-data", "config;config"
 }
 
-# Optional icon (convert .icns to .ico if needed, or use .ico directly)
+# Optional icon (the app icon lives under gui/assets)
+$ICON_PATH = "gui/assets/app.ico"
 $ICON_ARG = @()
-if (Test-Path "app.ico") {
-    $ICON_ARG = "--icon", "app.ico"
-    Write-Host "Using icon: app.ico" -ForegroundColor Green
+if (Test-Path $ICON_PATH) {
+    $ICON_ARG = "--icon", $ICON_PATH
+    Write-Host "Using icon: $ICON_PATH" -ForegroundColor Green
+} else {
+    Write-Warning "Icon not found at $ICON_PATH; building without a custom icon."
 }
 
 # Build the .exe with PyInstaller
@@ -139,15 +141,14 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "Executable built: dist/$APP_NAME.exe" -ForegroundColor Green
 
-# Sanity check: verify the bundled elapi data is included
-$BUNDLE_CHECK = "dist/$APP_NAME/_internal/elapi/api/_supported_versions"
-if (-not (Test-Path $BUNDLE_CHECK)) {
-    Write-Warning "Bundle check: elapi data files may not be properly bundled."
-    Write-Warning "Expected: $BUNDLE_CHECK"
-    Write-Host "This is often okay if PyInstaller uses a different internal structure."
-} else {
-    Write-Host "Bundle verification passed" -ForegroundColor Green
+# Sanity check: --onefile bundles everything (incl. elapi data) into a single .exe,
+# so there is no extracted folder to inspect at build time; just confirm the exe exists.
+$EXE_PATH = "dist/$APP_NAME.exe"
+if (-not (Test-Path $EXE_PATH)) {
+    Write-Error "Expected executable not found: $EXE_PATH"
+    exit 1
 }
+Write-Host "Build verification passed: $EXE_PATH" -ForegroundColor Green
 
 # Test the executable
 Write-Host "Testing executable..." -ForegroundColor Yellow
@@ -156,7 +157,8 @@ Write-Host "To test manually, run: .\dist\$APP_NAME.exe" -ForegroundColor Cyan
 # Optional: Create installer with Inno Setup
 Write-Host "Next step: Create Windows installer (optional)" -ForegroundColor Yellow
 Write-Host "Install Inno Setup from: https://jrsoftware.org/isdl.php" -ForegroundColor Cyan
-Write-Host "Then update 'installer.iss' with your app details and compile it." -ForegroundColor Cyan
+Write-Host "Then compile the installer, e.g.:" -ForegroundColor Cyan
+Write-Host "  ISCC /DArch=$Architecture installer.iss" -ForegroundColor Cyan
 
 Write-Host ""
 Write-Host "Build complete!" -ForegroundColor Green
