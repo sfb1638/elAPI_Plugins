@@ -15,6 +15,7 @@
 .env.*
 *.lock
 .codex
+CLAUDE.md
 !uv.lock
 
 # Coverage / tooling caches
