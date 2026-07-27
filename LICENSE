@@ -633,8 +633,8 @@ the "copyright" line and a pointer to where the full notice is found.
     Copyright (C) <year>  <name of author>
 
     This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
+    it under the terms of the GNU Affero General Public License as published
+    by the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
     This program is distributed in the hope that it will be useful,
@@ -659,38 +659,3 @@ specific requirements.
 if any, to sign a "copyright disclaimer" for the program, if necessary.
 For more information on this, and how to apply and follow the GNU AGPL, see
 <https://www.gnu.org/licenses/>.
-
-About
-
-An extensible API client for eLabFTW
-Topics
-api elabftw api-cli
-Resources
-Readme
-License
-AGPL-3.0 license
-Citation
-Activity
-Custom properties
-Stars
-17 stars
-Watchers
-3 watching
-Forks
-0 forks
-Report repository
-Releases 20
-Better eLab version enforcing release Latest
-3 weeks ago
-+ 19 releases
-Contributors 2
-
-    @mhxion
-    mhxion Mahadi Xion
-    @alexander-haller
-    alexander-haller Alexander Haller
-
-Languages
-
-    Python 100.0%
-
