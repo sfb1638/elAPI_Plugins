@@ -1,6 +1,15 @@
 <h1 align="center">elAPI Plugins</h1>
 
 <p align="center">
+  <img alt="License" src="https://img.shields.io/github/license/sfb1638/elAPI_Plugins">
+  <img alt="Version" src="https://img.shields.io/badge/dynamic/toml?url=https://raw.githubusercontent.com/sfb1638/elAPI_Plugins/main/pyproject.toml&amp;query=$.project.version&amp;label=version&amp;prefix=v&amp;color=green">
+  <img alt="Python" src="https://img.shields.io/badge/dynamic/toml?url=https://raw.githubusercontent.com/sfb1638/elAPI_Plugins/main/pyproject.toml&amp;query=$.project['requires-python']&amp;label=python&amp;color=blue">
+  <img alt="Last commit" src="https://img.shields.io/github/last-commit/sfb1638/elAPI_Plugins">
+  <img alt="Release" src="https://img.shields.io/github/v/release/sfb1638/elAPI_Plugins">
+  <img alt="Issues" src="https://img.shields.io/github/issues/sfb1638/elAPI_Plugins">
+</p>
+
+<p align="center">
   <img src="https://github.com/user-attachments/assets/e8ce314e-2f66-47af-9d08-b94324646984" alt="SFB1638 Logo" width="200">
 </p>
 
@@ -30,14 +39,14 @@ The project is developed as part of the **INF Project** of [CRC 1638](https://ww
 
 - Export **resources** (by category) or **experiments** to `.xlsx` files
 - Automatically extracts and flattens extra fields from eLabFTW metadata
-- Strips HTML from body content for clean spreadsheet output
+- Strips HTML from the main text (body) for clean spreadsheet output
 
 ### Import
 
 - Create new resources or experiments from CSV files
 - Update existing entries by providing entity IDs in the CSV
 - Supported fields per entry:
-  - Title, body, date, category, template
+  - Title, main text (body), date, category, template
   - Tags (via the eLabFTW `/tags` sub-endpoint)
   - File attachments (single files or directories)
   - Extra fields (matched to existing template fields with type coercion)
@@ -138,7 +147,7 @@ The importer automatically detects delimiters and encoding. Column names are mat
 | Column | Purpose |
 |--------|---------|
 | `title` | Entry title |
-| `body` | Main text / body content |
+| `body` | **Main text** of the entry — plain text or **HTML** (rendered as rich text in eLabFTW). Matched flexibly, so `Body Text` / `Main Body` also work. |
 | `tags` | Comma-, semicolon-, or pipe-separated tags |
 | `category` / `category id` | Numeric category ID |
 | `template` | Numeric template ID (used on creation) |
@@ -175,16 +184,23 @@ entry is being created or updated.
 
 ### Update behavior
 
-When updating an existing entry, columns are applied with different semantics:
+When updating an existing entry, a field that **already has a value** is either
+**overwritten** or **appended to**, depending on the field:
 
-| Field | Behavior |
-|-------|----------|
+| Field | On update |
+|-------|-----------|
 | `title` | **Overwritten** with the new value. |
 | Extra (template) fields | **Overwritten** with the new value. |
-| `body` | **Appended** — the new text is added after the existing body (kept, not replaced). |
-| `tags` | **Appended** — new tags are added to the existing ones; tags already present are skipped. |
-| `attachments` / `files_path` | **Appended** — new files are uploaded alongside existing attachments. |
-| `experiments links` / `resources links` | **Appended** — new links are added; existing links are kept. |
+| `date`, `category` | **Overwritten** with the new value. |
+| **Main text** (`body`) | **Appended** — the new text is added *after* the existing main text (kept, not replaced), separated by a line break. |
+| `tags` | **Appended** — new tags are added to the existing ones; duplicates are skipped. |
+| `attachments` / `files_path` | **Appended** — new files are uploaded alongside the existing attachments. |
+| Entity links (`experiments links` / `resources links`, and *items*/*experiments* extra fields) | **Appended** — new links are added; existing links are kept (not de-duplicated). |
+
+In short: **most fields overwrite** the previous value, but the **main text is the
+exception — it is appended.** To **replace** the main text instead of appending, first
+clear it with the `$delete_V` marker (see below), then import the new text — which is
+then written into the now-empty main text.
 
 ### Update markers
 
@@ -192,11 +208,13 @@ When CSV import is used in update mode, you can place special marker values in i
 
 | Marker | Effect |
 |--------|--------|
-| `$delete_V` | Clears the existing value for that field. |
+| `$delete_V` | Clears the existing value of that field (the main text, or an extra field's value). |
 | `$delete_F` | Removes the existing extra field from metadata. |
 | `$rename$New Name` | Renames the existing extra field to `New Name`, keeping its value and definition. |
 
 `$delete_V` and `$delete_F` must match exactly. For example, `delete_V` or ` $delete_v ` are treated as normal text.
+
+`$delete_V` is also the way to **overwrite the main text**: because the main text is otherwise appended, put `$delete_V` in the `body` cell to clear it, then import the new text in a subsequent update. Note that `$delete_V` clears the **main text** and **extra-field values** only — it does not remove tags, attachments, or links that have already been added (those are append-only).
 
 For renaming, place `$rename$New Name` in the cell under the column whose header is the field's **current** name; everything after the `$rename$` prefix becomes the new field name (surrounding whitespace is trimmed). The prefix must appear at the very start of the cell — ` $rename$X` (leading space) or `rename$X` (no leading `$`) are treated as normal text. The cell is consumed by the rename, so it does not also set a value. If a field named `New Name` already exists, the rename is skipped (the existing field is not overwritten), and renaming a field the entry does not have is a no-op.
 
