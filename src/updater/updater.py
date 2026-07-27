@@ -171,7 +171,10 @@ def get_current_version (fallback: str = "0.0.0") -> str:
 
         return version("elapi-plugins")
     except Exception:
-        pass
+        logger.debug(
+            "Could not read version from package metadata; trying pyproject.toml.",
+            exc_info=True,
+        )
 
     pyproject = pathlib.Path(__file__).resolve().parents[2] / "pyproject.toml"
     if pyproject.is_file():

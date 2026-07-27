@@ -1,4 +1,5 @@
 import json
+import logging
 import math
 import time
 from collections.abc import Callable, Iterator, Sequence
@@ -16,6 +17,8 @@ from requests.exceptions import (  # type: ignore[import-untyped]
     ConnectTimeout,
     ReadTimeout,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def strip_html(html_str: str) -> str:
@@ -42,6 +45,11 @@ def ensure_series(row: Any) -> pd.Series | None:
         try:
             return pd.Series(row._asdict())
         except Exception:
+            logger.debug(
+                "Could not convert %s to a Series.",
+                type(row).__name__,
+                exc_info=True,
+            )
             return None
     return None
 
@@ -92,11 +100,29 @@ def paged_fetch(
                 break
             except Timeouts:
                 if attempt >= max_retries:
+                    logger.warning(
+                        "Timed out fetching page at offset %s after %s retries; "
+                        "skipping this window — exported data may be incomplete.",
+                        offset,
+                        max_retries,
+                    )
                     page = []
                     break
                 attempt += 1
-                time.sleep(backoff_s(attempt))
-                current_limit = max(min_limit, math.ceil(current_limit / 2))
+                delay = backoff_s(attempt)
+                new_limit = max(min_limit, math.ceil(current_limit / 2))
+                logger.debug(
+                    "Timeout fetching page at offset %s (limit %s); "
+                    "retry %s/%s in %.1fs with limit %s.",
+                    offset,
+                    current_limit,
+                    attempt,
+                    max_retries,
+                    delay,
+                    new_limit,
+                )
+                time.sleep(delay)
+                current_limit = new_limit
 
         if not page:
             # Exhausted retries: skip this window and advance

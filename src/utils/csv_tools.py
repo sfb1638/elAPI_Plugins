@@ -1,9 +1,12 @@
 import csv
+import logging
 from io import StringIO
 from pathlib import Path
 
 import chardet
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 class CsvTools:
@@ -39,7 +42,15 @@ class CsvTools:
             counts = {d: header.count(d) for d in candidates}
             best = max(counts, key=lambda delim: counts[delim])
             # Require at least two occurrences; otherwise default to semicolon
-            return best if counts[best] >= 2 else ";"
+            delimiter = best if counts[best] >= 2 else ";"
+            logger.debug(
+                "csv.Sniffer could not detect a delimiter for %s; "
+                "falling back to %r (header counts: %s).",
+                path,
+                delimiter,
+                counts,
+            )
+            return delimiter
 
     @staticmethod
     def csv_to_df(csv_path: Path | str) -> pd.DataFrame:
