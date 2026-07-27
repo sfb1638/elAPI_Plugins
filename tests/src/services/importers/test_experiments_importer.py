@@ -560,7 +560,7 @@ def test_patch_existing_delete_F_removes_extra_field_metadata(
 def test_patch_existing_rename_extra_field(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """'$rename->New Name' renames the field key while preserving value and definition."""
+    """'$rename$New Name' renames the field key while preserving value and definition."""
     metadata = {
         "extra_fields": {
             "Custom Field": {"value": "keepme", "type": "text", "group_id": 3},
@@ -582,7 +582,7 @@ def test_patch_existing_rename_extra_field(
         monkeypatch,
         tmp_path,
         ["title", "Custom Field"],
-        [["t", "$rename->New Name"]],
+        [["t", "$rename$New Name"]],
         get=fake_get,
         patch=fake_patch,
     )
@@ -622,7 +622,7 @@ def test_patch_existing_rename_collision_is_skipped(
         monkeypatch,
         tmp_path,
         ["title", "Custom Field"],
-        [["t", "$rename->Target"]],
+        [["t", "$rename$Target"]],
         get=fake_get,
         patch=fake_patch,
     )
@@ -657,7 +657,7 @@ def test_patch_existing_rename_nonexistent_field_noop(
         monkeypatch,
         tmp_path,
         ["title", "Missing Field"],
-        [["t", "$rename->Whatever"]],
+        [["t", "$rename$Whatever"]],
         get=fake_get,
         patch=fake_patch,
     )
@@ -671,13 +671,13 @@ def test_patch_existing_rename_nonexistent_field_noop(
 
 
 def test_extract_rename_map_requires_exact_prefix() -> None:
-    """Only cells starting exactly with '$rename->' are treated as rename markers."""
+    """Only cells starting exactly with '$rename$' are treated as rename markers."""
     row = pd.Series(
         {
-            "A": "$rename->New A",
-            "B": " $rename->spaced",
-            "C": "rename->no dollar",
-            "D": "$rename->",
+            "A": "$rename$New A",
+            "B": " $rename$spaced",
+            "C": "rename$no leading dollar",
+            "D": "$rename$",
             "E": "normal",
         }
     )
@@ -1236,6 +1236,100 @@ def test_post_extra_fields_creates_new_field(
     assert metadata["extra_fields"]["Custom Column"]["value"] == "custom_val"
 
 
+def test_post_extra_fields_link_metadata_uses_id_string(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def fake_get(**kwargs: Any) -> FakeResponse:
+        return FakeResponse(
+            json_data={
+                "metadata": {
+                    "extra_fields": {
+                        "Cloning Experiment ID": {
+                            "type": "experiments",
+                            "value": "",
+                        }
+                    }
+                }
+            }
+        )
+
+    captured: list[dict[str, Any]] = []
+
+    def fake_patch(**kwargs: Any) -> FakeResponse:
+        captured.append(kwargs["data"])
+        return FakeResponse()
+
+    importer = _make_importer(
+        monkeypatch,
+        tmp_path,
+        ["title", "Cloning Experiment ID"],
+        [["linked", 22576], ["empty", ""]],
+        get=fake_get,
+        patch=fake_patch,
+    )
+
+    raw_value = importer.basic_df.iloc[0]["Cloning Experiment ID"]
+    assert isinstance(raw_value, float)
+
+    importer.post_extra_fields_from_row(
+        "1", importer.basic_df.iloc[0], known_columns={"title"}
+    )
+
+    metadata = json.loads(captured[0]["metadata"])
+    value = metadata["extra_fields"]["Cloning Experiment ID"]["value"]
+    # Must be the id as a JSON string ("22576"), not a number, or eLabFTW
+    # will not render the linked entity.
+    assert value == "22576"
+    assert isinstance(value, str)
+
+
+@pytest.mark.parametrize(
+    ("field_type", "sub_endpoint"),
+    [("items", "items_links"), ("experiments", "experiments_links")],
+)
+def test_link_type_extra_field_creates_real_link(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    field_type: str,
+    sub_endpoint: str,
+) -> None:
+    """An items/experiments extra field must also POST a real link (like the UI),
+    not only set the metadata value — otherwise nothing renders / links."""
+    def fake_get(**kwargs: Any) -> FakeResponse:
+        return FakeResponse(
+            json_data={
+                "metadata": {
+                    "extra_fields": {"GMO_Project": {"type": field_type, "value": ""}}
+                }
+            }
+        )
+
+    link_posts: list[dict] = []
+
+    def fake_post(**kwargs: Any) -> FakeResponse:
+        link_posts.append(kwargs)
+        return FakeResponse()
+
+    importer = _make_importer(
+        monkeypatch,
+        tmp_path,
+        ["title", "GMO_Project"],
+        [["t", "2311"]],
+        get=fake_get,
+        post=fake_post,
+        patch=lambda **kw: FakeResponse(),
+    )
+
+    importer.post_extra_fields_from_row(
+        "2313", importer.basic_df.iloc[0], known_columns={"title"}
+    )
+
+    assert len(link_posts) == 1
+    assert link_posts[0]["sub_endpoint_name"] == sub_endpoint
+    assert link_posts[0]["sub_endpoint_id"] == 2311
+    assert link_posts[0].get("data") == {"action": "create"}
+
+
 def test_post_extra_fields_with_links(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -1264,6 +1358,9 @@ def test_post_extra_fields_with_links(
     assert len(link_posts) == 2
     sub_endpoints = [p["sub_endpoint_name"] for p in link_posts]
     assert all(s == "experiments_links" for s in sub_endpoints)
+    assert [p["sub_endpoint_id"] for p in link_posts] == [5, 10]
+    # eLabFTW requires an {"action": "create"} body; without it the API 500s.
+    assert all(p.get("data") == {"action": "create"} for p in link_posts)
 
 
 def test_post_extra_fields_with_items_links(
@@ -1292,6 +1389,62 @@ def test_post_extra_fields_with_items_links(
 
     assert len(link_posts) == 1
     assert link_posts[0]["sub_endpoint_name"] == "items_links"
+    assert link_posts[0]["sub_endpoint_id"] == 3
+    assert link_posts[0].get("data") == {"action": "create"}
+
+
+@pytest.mark.parametrize(
+    ("header", "sub_endpoint"),
+    [
+        ("experiments links", "experiments_links"),
+        ("experiments_links", "experiments_links"),
+        ("Experiments_Links", "experiments_links"),
+        ("experimentslinks", "experiments_links"),
+        ("resources_links", "items_links"),
+        ("Resources Links", "items_links"),
+        ("items_links", "items_links"),
+    ],
+)
+def test_link_columns_match_regardless_of_spaces_or_underscores(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    header: str,
+    sub_endpoint: str,
+) -> None:
+    """Link headers match with spaces, underscores, or neither (not as extra fields)."""
+    def fake_get(**kwargs: Any) -> FakeResponse:
+        return FakeResponse(json_data={"metadata": {"extra_fields": {}}})
+
+    link_posts: list[dict] = []
+    metadata_patches: list[dict] = []
+
+    def fake_post(**kwargs: Any) -> FakeResponse:
+        link_posts.append(kwargs)
+        return FakeResponse()
+
+    def fake_patch(**kwargs: Any) -> FakeResponse:
+        data = kwargs.get("data")
+        if isinstance(data, dict) and "metadata" in data:
+            metadata_patches.append(data)
+        return FakeResponse()
+
+    importer = _make_importer(
+        monkeypatch, tmp_path,
+        ["title", header],
+        [["t", "5,6"]],
+        get=fake_get,
+        post=fake_post,
+        patch=fake_patch,
+    )
+
+    importer.post_extra_fields_from_row(
+        "1", importer.basic_df.iloc[0], known_columns={"title"}
+    )
+
+    assert [p["sub_endpoint_name"] for p in link_posts] == [sub_endpoint] * 2
+    assert [p["sub_endpoint_id"] for p in link_posts] == [5, 6]
+    # The column must not leak into extra_fields metadata.
+    assert not metadata_patches
 
 
 def test_post_extra_fields_string_metadata(
@@ -1557,6 +1710,10 @@ def test_parse_link_ids_floats() -> None:
     assert exp_module.ExperimentsImporter._parse_link_ids("1.0, 2.0") == [1, 2]
 
 
+def test_parse_link_ids_rejects_fractional_values() -> None:
+    assert exp_module.ExperimentsImporter._parse_link_ids("1.5, 2.0") == [2]
+
+
 def test_parse_link_ids_negative_skipped() -> None:
     assert exp_module.ExperimentsImporter._parse_link_ids("-1, 5") == [5]
 
@@ -1601,6 +1758,27 @@ def test_coerce_single_select_no_match() -> None:
 def test_coerce_non_select() -> None:
     defn = {"type": "text"}
     assert exp_module.ExperimentsImporter._coerce_for_field(defn, "hello") == "hello"
+
+
+@pytest.mark.parametrize("field_type", ["items", "experiments"])
+def test_coerce_link_field_to_id_string(field_type: str) -> None:
+    # eLabFTW needs the linked id as a *string* in metadata; a JSON number is
+    # not rendered as a link. The ".0" from float-parsed CSV cells is dropped.
+    coerced = exp_module.ExperimentsImporter._coerce_for_field(
+        {"type": field_type}, "22576.0"
+    )
+    assert coerced == "22576"
+    assert isinstance(coerced, str)
+
+
+@pytest.mark.parametrize("raw", ["22576.5", "not-an-id", -1, float("nan")])
+def test_coerce_link_field_rejects_invalid_id(raw: Any) -> None:
+    assert (
+        exp_module.ExperimentsImporter._coerce_for_field(
+            {"type": "experiments"}, raw
+        )
+        is None
+    )
 
 
 def test_coerce_none_defn() -> None:

@@ -7,9 +7,11 @@ import logging
 import math
 import mimetypes
 import os
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -113,12 +115,19 @@ class BaseImporter(ABC):
         return canon_column_map
 
     def _find_col_like(self, name: str) -> str | None:
-        """Find a column whose canonical form matches or contains ``name``."""
+        """Find a column matching ``name`` exactly (canonical) or as a whole word.
+
+        The whole-word fallback lets ``"body"`` match headers like ``"Body Text"``
+        or ``"Main Body"`` while NOT matching ``"Antibody"`` — where ``"body"`` is
+        merely a suffix. Tokens are split on any non-alphanumeric separator (space,
+        underscore, hyphen, ...) so ``"body_content"`` matches too.
+        """
         target = canonicalize(name)
         if target in self.cols_canon:
             return self.cols_canon[target]
         for canon_col, original in self.cols_canon.items():
-            if target in canon_col or canon_col in target:
+            tokens = {canonicalize(t) for t in re.split(r"[^0-9A-Za-z]+", original) if t}
+            if target in tokens:
                 return original
         return None
 
@@ -236,6 +245,35 @@ class BaseImporter(ABC):
         return parts
 
     @staticmethod
+    def _parse_integer_id(value: Any) -> int | None:
+        """Return a non-negative integer ID without truncating decimal values."""
+        if value is None or isinstance(value, bool):
+            return None
+
+        try:
+            if pd.isna(value):
+                return None
+        except (TypeError, ValueError):
+            return None
+
+        text = str(value).replace("\u00a0", " ").strip()
+        if not text:
+            return None
+
+        try:
+            decimal_value = Decimal(text)
+        except (InvalidOperation, ValueError):
+            return None
+
+        if (
+            not decimal_value.is_finite()
+            or decimal_value < 0
+            or decimal_value != decimal_value.to_integral_value()
+        ):
+            return None
+        return int(decimal_value)
+
+    @staticmethod
     def _parse_link_ids(raw: Any) -> list[int]:
         """Return a list of numeric link ids parsed from a CSV cell."""
         if raw is None or (isinstance(raw, float) and pd.isna(raw)):
@@ -248,25 +286,29 @@ class BaseImporter(ABC):
         ids: list[int] = []
         for chunk in BaseImporter._split_multi(text):
             cleaned = chunk.strip()
-            try:
-                num = int(float(cleaned))
-            except Exception:
-                continue
-            if num < 0:
+            num = BaseImporter._parse_integer_id(cleaned)
+            if num is None:
                 continue
             if num not in ids:
                 ids.append(num)
         return ids
 
     @staticmethod
-    def _coerce_for_field(defn: dict, raw: str) -> Any | None:
+    def _coerce_for_field(defn: dict, raw: Any) -> Any | None:
         ftype = (defn or {}).get("type")
         allow_multi = bool((defn or {}).get("allow_multi_values"))
         options = (defn or {}).get("options") or []
         options_set = {str(o).strip() for o in options}
 
+        if ftype in {"items", "experiments"}:
+            # eLabFTW stores the linked entity id as a *string* in metadata; a JSON
+            # number (e.g. 2311 instead of "2311") is not rendered as a link. Parse
+            # to a clean integer id (dropping any ".0") then store it as a string.
+            parsed = BaseImporter._parse_integer_id(raw)
+            return None if parsed is None else str(parsed)
+
         if ftype == "select":
-            vals = BaseImporter._split_multi(raw)
+            vals = BaseImporter._split_multi(str(raw))
             if allow_multi:
                 lower_map = {o.lower(): o for o in options_set}
                 picked: list[str] = []
@@ -758,18 +800,32 @@ class BaseImporter(ABC):
     def _post_links(
         self, entity_id: str, link_ops: list[tuple[str, list[int]]]
     ) -> None:
-        """Create links via sub-endpoints (experiments_links/items_links)."""
+        """Create links via sub-endpoints (experiments_links/items_links).
+
+        eLabFTW's ``POST /{entity}/{id}/{..._links}/{subid}`` requires an
+        ``{"action": "create"}`` body — without it the API returns HTTP 500 and
+        no link is created (see apidoc v2).
+        """
         for endpoint_name, ids in link_ops:
             sub_endpoint = endpoint_name
-            for link_id in ids:
+            for raw_link_id in ids:
+                link_id = self._parse_integer_id(raw_link_id)
+                if link_id is None:
+                    logger.warning(
+                        "Skipping invalid link ID %r for %s.",
+                        raw_link_id,
+                        sub_endpoint,
+                    )
+                    continue
                 try:
                     resp = self.endpoint.post(
                         endpoint_id=entity_id,
                         sub_endpoint_name=sub_endpoint,
                         sub_endpoint_id=link_id,
+                        data={"action": "create"},
                     )
                     resp.raise_for_status()
-                    logger.debug(
+                    logger.info(
                         "Linked entry %s via %s -> %s",
                         entity_id,
                         sub_endpoint,
@@ -801,15 +857,26 @@ class BaseImporter(ABC):
             if canon_col in extra_map and canon_col not in known_canon:
                 value = row[column]
                 if pd.isna(value):
-                    val_str = ""
+                    normalized_value: Any = ""
                 else:
                     if hasattr(value, "item") and not isinstance(value, str):
                         try:
                             value = value.item()
                         except Exception:
                             pass
-                    val_str = str(value)
-                extra_map[canon_col]["value"] = val_str
+                    field = extra_map[canon_col]
+                    if field.get("type") in {"items", "experiments"}:
+                        normalized_value = self._coerce_for_field(field, value)
+                        if normalized_value is None:
+                            logger.warning(
+                                "Skipping link field %r with invalid ID %r.",
+                                column,
+                                value,
+                            )
+                            continue
+                    else:
+                        normalized_value = str(value)
+                extra_map[canon_col]["value"] = normalized_value
                 updated_fields.append(canon_col)
         patch_data = {"metadata": {"extra_fields": list(extra_map.values())}}
         try:
@@ -967,6 +1034,20 @@ class BaseImporter(ABC):
                         raw_val,
                     )
                     continue
+
+                # For link-type extra fields (items/experiments), eLabFTW's own UI
+                # both stores the id in metadata AND creates a real entity link so
+                # the entry shows in the linked section at the bottom. Mirror that:
+                # setting only the metadata value renders nothing without the link.
+                ftype = (defn or {}).get("type")
+                if ftype in {"items", "experiments"}:
+                    sub_endpoint = (
+                        "items_links" if ftype == "items" else "experiments_links"
+                    )
+                    link_ids = self._parse_link_ids(coerced)
+                    if link_ids:
+                        link_ops.append((sub_endpoint, link_ids))
+
                 slot = elab_extra_fields.get(real_key)
 
                 if not isinstance(slot, dict):

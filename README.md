@@ -130,7 +130,6 @@ After launching, the GUI opens automatically in your default browser at `http://
 | **Download resource template** | Select a resource category and download a blank CSV with all standard and extra-field columns for that category. |
 | **Download experiment template** | Select an experiment template and download a blank CSV with all standard and extra-field columns for that template. |
 | **Import from CSV** | Upload a CSV file to create new entries or update existing ones. Select the target type, assign a category or template, and optionally enable update mode. |
-| **Download Templates** | Select a resource category or experiment template and download a blank, semicolon-delimited CSV pre-populated with the correct column headers, ready to fill in and re-import. |
 
 ### CSV format
 
@@ -150,6 +149,29 @@ The importer automatically detects delimiters and encoding. Column names are mat
 | `resources links` | Comma-separated resource IDs to link |
 
 Any additional columns are matched against the extra fields defined in the entry's template and updated accordingly.
+
+### Linking entries vs. link-type extra fields
+
+There are two different ways a link can end up on an entry, and the **column header decides which one you get**:
+
+| Column header | What happens | Where it appears in eLabFTW |
+|---------------|--------------|-----------------------------|
+| A recognized **link column** (see below) | A real entity link is created via the `experiments_links` / `items_links` sub-endpoint | In the **linked entries section at the bottom** of the entry page |
+| A template extra field of type *items*/*experiments* | The linked id is written into `metadata.extra_fields` **and** a real link is created | Both **inside the field** and in the **bottom linked section** (same as picking it in the eLabFTW UI) |
+| Any other column name | The value is written into the entry's `metadata.extra_fields` | Inside the field only |
+
+Recognized link columns (matching ignores case, spaces and underscores, so
+`experiments links`, `Experiments_Links` and `experimentslinks` are equivalent):
+
+| Column | Links to |
+|--------|----------|
+| `experiments links` / `experiment link` | Experiments |
+| `resources links` / `resource link` / `items links` / `item link` | Resources (items) |
+
+Link values are comma- or semicolon-separated numeric IDs (e.g. `12, 34`); for a
+template *items*/*experiments* field it is the single linked entity ID. Non-numeric
+values are ignored and a warning is logged. This behaviour is identical whether the
+entry is being created or updated.
 
 ### Update behavior
 
@@ -172,13 +194,13 @@ When CSV import is used in update mode, you can place special marker values in i
 |--------|--------|
 | `$delete_V` | Clears the existing value for that field. |
 | `$delete_F` | Removes the existing extra field from metadata. |
-| `$rename->New Name` | Renames the existing extra field to `New Name`, keeping its value and definition. |
+| `$rename$New Name` | Renames the existing extra field to `New Name`, keeping its value and definition. |
 
 `$delete_V` and `$delete_F` must match exactly. For example, `delete_V` or ` $delete_v ` are treated as normal text.
 
-For renaming, place `$rename->New Name` in the cell under the column whose header is the field's **current** name; everything after `->` becomes the new field name (surrounding whitespace is trimmed). The cell is consumed by the rename, so it does not also set a value. If a field named `New Name` already exists, the rename is skipped (the existing field is not overwritten).
+For renaming, place `$rename$New Name` in the cell under the column whose header is the field's **current** name; everything after the `$rename$` prefix becomes the new field name (surrounding whitespace is trimmed). The prefix must appear at the very start of the cell — ` $rename$X` (leading space) or `rename$X` (no leading `$`) are treated as normal text. The cell is consumed by the rename, so it does not also set a value. If a field named `New Name` already exists, the rename is skipped (the existing field is not overwritten), and renaming a field the entry does not have is a no-op.
 
-The `title` column is read before markers are applied, so `$delete_V`/`$delete_F` in the `title` cell have no effect — the title is always sent as-is and can never be cleared or removed via these markers.
+The `title` column is read before markers are applied, so markers in the `title` cell have no effect — the title is always sent as-is and can never be cleared, removed or renamed this way.
 
 ### Downloading CSV templates
 

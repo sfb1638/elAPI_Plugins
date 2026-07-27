@@ -68,6 +68,19 @@ def test_find_col_like() -> None:
     assert imp._find_col_like("title") == "Title"
 
 
+def test_find_col_like_matches_whole_words_only() -> None:
+    """'body' matches 'Main Body'/'body_content' but not 'Antibody' (suffix only)."""
+    imp = DummyImporter(pd.DataFrame({"Main Body": ["x"], "Title": ["y"]}))
+    assert imp._find_col_like("body") == "Main Body"
+
+    imp = DummyImporter(pd.DataFrame({"body_content": ["x"]}))
+    assert imp._find_col_like("body") == "body_content"
+
+    # 'body' is only a suffix of 'antibody' -> must NOT be treated as the body col.
+    imp = DummyImporter(pd.DataFrame({"Antibody conc": ["x"], "Title": ["y"]}))
+    assert imp._find_col_like("body") is None
+
+
 def test_find_path_col_is_case_and_whitespace_insensitive() -> None:
     df = pd.DataFrame({"Files Path": ["folder"], "Title": ["y"]})
     imp = DummyImporter(df)
@@ -112,3 +125,37 @@ def test_patch_decoded_extra_fields(monkeypatch: pytest.MonkeyPatch) -> None:
 
     imp.patch_decoded_extra_fields("1", row, known_columns=set())
     assert "metadata" in captured["data"]
+
+
+def test_patch_decoded_link_field_uses_id_string() -> None:
+    df = pd.DataFrame({"Cloning Experiment ID": [22576.0, None]})
+    imp = DummyImporter(df)
+
+    def fake_get(**kwargs: Any) -> FakeResponse:
+        return FakeResponse(
+            json_data={
+                "metadata_decoded": {
+                    "extra_fields": [
+                        {
+                            "title": "Cloning Experiment ID",
+                            "type": "experiments",
+                            "value": "",
+                        }
+                    ]
+                }
+            }
+        )
+
+    captured: dict[str, dict[str, Any]] = {}
+
+    def fake_patch(**kwargs: Any) -> FakeResponse:
+        captured["data"] = kwargs["data"]
+        return FakeResponse()
+
+    imp._endpoint = FakeEndpoint(get=fake_get, patch=fake_patch)
+    imp.patch_decoded_extra_fields("1", df.iloc[0], known_columns=set())
+
+    field = captured["data"]["metadata"]["extra_fields"][0]
+    # eLabFTW needs the linked id as a JSON string, not a number.
+    assert field["value"] == "22576"
+    assert isinstance(field["value"], str)
