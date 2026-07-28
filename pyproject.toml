@@ -1,14 +1,22 @@
+[build-system]
+requires = ["setuptools>=68.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "elapi-plugins"
 version = "1.2.0"
 description = "Plugin tools for eLabFTW and Labfolder migration, developed as part of the INF Project of CRC 1638 at Heidelberg University"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "AGPL-3.0-or-later" }
 
 authors = [
+    { name = "Dionysios Antypas", email = "dionysios.antypas@bzh.uni-heidelberg.de" },
+    { name = "Neele Drobnitzky",  email = "neele.drobnitzky@bzh.uni-heidelberg.de" }
+]
+maintainers = [
     { name = "Dionysios Antypas", email = "dionysios.antypas@bzh.uni-heidelberg.de" }
 ]
-readme = "README.md"
-license = { text = "AGPL-3.0-or-later" }
-requires-python = ">=3.11"
 
 dependencies = [
     "flask>=3.1.1",
@@ -21,8 +29,6 @@ dependencies = [
     "elapi>=2.3.3",
     "openpyxl>=3.0.0",
     "responses>=0.25.8",
-    "pandas-stubs~=2.3.3",
-    "ipykernel>=7.1.0",
 ]
 
 [project.optional-dependencies]
@@ -45,10 +51,17 @@ dev = [
     "deptry>=0.24.0",
     "pip-check-reqs>=2.5.5",
     "pip-chill>=1.0.3",
+    "ipykernel>=7.1.0",
 ]
 
 [project.urls]
-Homepage = "https://github.com/dantypas3/elAPI_Plugins"
+Homepage = "https://github.com/sfb1638/elAPI_Plugins"
+Repository = "https://github.com/sfb1638/elAPI_Plugins.git"
+Issues = "https://github.com/sfb1638/elAPI_Plugins/issues"
+
+# -------------------------
+# Setuptools Configuration
+# -------------------------
 
 [tool.setuptools]
 package-dir = { "" = "src" }
@@ -56,26 +69,18 @@ package-dir = { "" = "src" }
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
-
 # -------------------------
-# Ruff (lint + optional format)
+# Ruff (Linting & Formatting)
 # -------------------------
 
 [tool.ruff]
-# Keep this consistent with Prettier’s printWidth and any editor settings.
 line-length = 89
 target-version = "py311"
 
 [tool.ruff.lint]
-# A solid default set for most projects.
 select = ["E", "F", "I", "B", "UP"]
-# Example ignores (adjust to your preferences / team conventions):
 ignore = []
 
 [tool.ruff.format]
-# Keep formatter defaults unless you have a strong reason.
 quote-style = "double"
 indent-style = "space"
