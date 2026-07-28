@@ -27,8 +27,7 @@
 
 elAPI Plugins is a desktop application for bulk importing and exporting **resources** and **experiments** in [eLabFTW](https://www.elabftw.net/) instances. It provides a browser-based GUI for researchers and lab managers who need to migrate, back up, or batch-update electronic lab notebook entries from CSV and Excel files.
 
-The project is developed as part of the **INF Project** of [CRC 1638](https://www.sfb1638.de/) at the [Heidelberg University Biochemistry Center (BZH)](https://bzh.db-engine.de/) and is built on top of the [elAPI](https://github.com/uhd-urz/elAPI) framework.
-
+The project is developed as part of the **INF Project** of [CRC 1638](https://www.sfb1638.de/) [(GEPRIS: 511488495)](https://gepris.dfg.de/project/511488495?lang=en) at the [Heidelberg University Biochemistry Center (BZH)](https://bzh.db-engine.de/) and is built on top of the [elAPI](https://github.com/uhd-urz/elAPI) framework.
 ---
 
 ## Features
@@ -107,9 +106,20 @@ Follow the [elAPI installation guide](https://github.com/uhd-urz/elAPI?tab=readm
 2. Run the installer and follow the on-screen instructions.
 3. Launch **elAPI Plugins** from the Start Menu or the desktop shortcut (optional, selected during installation).
 
-### Linux
+### Linux (Debian / Ubuntu)
 
-Linux does not have a packaged installer. Run the application from source:
+1. Download the latest `.deb` package from the [Releases](https://github.com/sfb1638/elAPI_Plugins/releases) page, e.g. `elapi-plugins_1.2.0_amd64.deb`.
+2. Install it:
+
+   ```bash
+   sudo apt install ./elapi-plugins_1.2.0_amd64.deb
+   ```
+
+3. Launch **elAPI Plugins** from your application menu, or run `elapi-plugins` in a terminal.
+
+The package is self-contained — no separate Python installation is required. To remove it, run `sudo apt remove elapi-plugins`.
+
+On other distributions, run the application from source:
 
 ```bash
 git clone https://github.com/sfb1638/elAPI_Plugins.git
@@ -141,6 +151,22 @@ To run the GUI or import the package inside a Jupyter notebook, register the env
 ```
 
 Then select the **elAPI Plugins** kernel in your notebook.
+
+### Build the release artifacts
+
+Each script builds into a throwaway `.pkg-build` environment, so your development interpreter is untouched. Run each on its target platform:
+
+| Platform | Command | Output |
+|----------|---------|--------|
+| Linux | `./scripts/package_linux.sh` | `dist/elapi-plugins` and `dist/elapi-plugins_<version>_<arch>.deb` |
+| macOS | `./scripts/package_mac.sh` | `dist/elAPI_Plugins_<arch>.app` and `.dmg` |
+| Windows | `.\scripts\package_windows.ps1` then `ISCC /DArch=x64 packaging\installer.iss` | `dist/elAPI_Plugins_x64.exe` and an Inno Setup installer |
+
+The Linux `.deb` step requires [fpm](https://fpm.readthedocs.io); without it the standalone binary is still built:
+
+```bash
+sudo apt install ruby ruby-dev build-essential && sudo gem install --no-document fpm
+```
 
 ---
 
@@ -261,11 +287,14 @@ elAPI_Plugins/
 ├── scripts/
 │   ├── setup_env.sh         Create/refresh the .build virtual environment (Linux/macOS)
 │   ├── setup_env.ps1        Create/refresh the .build virtual environment (Windows)
-│   └── package_mac.sh       Build a self-contained macOS .app + .dmg
+│   ├── package_linux.sh     Build a standalone Linux binary + .deb
+│   ├── package_mac.sh       Build a self-contained macOS .app + .dmg
+│   └── package_windows.ps1  Build a self-contained Windows .exe
+├── packaging/
+│   ├── elapi-plugins.desktop  Desktop entry installed by the .deb
+│   └── installer.iss          Inno Setup script for the Windows installer
 ├── tests/                   Test suite
-├── pyproject.toml           Project metadata and dependencies
-├── build_windows.ps1        Build a self-contained Windows .exe
-└── installer.iss            Inno Setup script for the Windows installer
+└── pyproject.toml           Project metadata and dependencies
 ```
 
 ---
