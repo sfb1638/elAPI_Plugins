@@ -16,6 +16,7 @@
 *.lock
 .codex
 CLAUDE.md
+todo.md
 !uv.lock
 
 # Coverage / tooling caches
