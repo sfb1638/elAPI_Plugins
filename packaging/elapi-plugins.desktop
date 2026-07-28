@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=elAPI Plugins
+GenericName=eLabFTW Import/Export
+Comment=Import and export eLabFTW resources and experiments
+Exec=elapi-plugins
+Icon=elapi-plugins
+Terminal=false
+Categories=Science;Utility;
+Keywords=eLabFTW;ELN;CSV;XLSX;import;export;
+StartupNotify=true

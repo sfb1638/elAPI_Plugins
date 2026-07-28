@@ -9,6 +9,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Always run from the project root regardless of where the script is invoked from
+Set-Location (Split-Path -Parent $PSScriptRoot)
+
 # Validate architecture
 if ($Architecture -notmatch "^(x64|x86)$") {
     Write-Error "Unsupported architecture: $Architecture. Use x64 or x86"
@@ -158,7 +161,7 @@ Write-Host "To test manually, run: .\dist\$APP_NAME.exe" -ForegroundColor Cyan
 Write-Host "Next step: Create Windows installer (optional)" -ForegroundColor Yellow
 Write-Host "Install Inno Setup from: https://jrsoftware.org/isdl.php" -ForegroundColor Cyan
 Write-Host "Then compile the installer, e.g.:" -ForegroundColor Cyan
-Write-Host "  ISCC /DArch=$Architecture installer.iss" -ForegroundColor Cyan
+Write-Host "  ISCC /DArch=$Architecture packaging\installer.iss" -ForegroundColor Cyan
 
 Write-Host ""
 Write-Host "Build complete!" -ForegroundColor Green

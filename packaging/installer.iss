@@ -1,7 +1,11 @@
 ; Inno Setup script for elAPI_Plugins.
-; Compile from the repo root after building the .exe with build_windows.ps1:
-;   ISCC installer.iss                     (defaults: version 1.2.0, x64)
-;   ISCC /DAppVer=1.2.0 /DArch=x64 installer.iss   (override version/arch)
+; Compile after building the .exe with scripts\package_windows.ps1:
+;   ISCC packaging\installer.iss                            (defaults: 1.2.0, x64)
+;   ISCC /DAppVer=1.2.0 /DArch=x64 packaging\installer.iss   (override version/arch)
+;
+; SourceDir points at the repo root (this file lives in packaging/), so all
+; relative paths below — dist\..., gui\assets\... — resolve from there.
+; Note: {#SourcePath} already ends with a backslash, hence "{#SourcePath}.."
 
 #ifndef AppVer
   #define AppVer "1.2.0"
@@ -12,7 +16,7 @@
 #define AppExe "elAPI_Plugins_" + Arch + ".exe"
 
 [Setup]
-SourceDir={#SourcePath}
+SourceDir={#SourcePath}..
 AppName=elAPI_Plugins
 AppVersion={#AppVer}
 AppPublisher=SFB-1638
