@@ -27,7 +27,8 @@
 
 elAPI Plugins is a desktop application for bulk importing and exporting **resources** and **experiments** in [eLabFTW](https://www.elabftw.net/) instances. It provides a browser-based GUI for researchers and lab managers who need to migrate, back up, or batch-update electronic lab notebook entries from CSV and Excel files.
 
-The project is developed as part of the **INF Project** of [CRC 1638](https://www.sfb1638.de/) [(GEPRIS: 511488495)](https://gepris.dfg.de/project/511488495?lang=en) at the [Heidelberg University Biochemistry Center (BZH)](https://bzh.db-engine.de/) and is built on top of the [elAPI](https://github.com/uhd-urz/elAPI) framework.
+The project is developed as part of the **INF Project**  of [CRC 1638](https://www.sfb1638.de/) [(GEPRIS: 511488495)](https://gepris.dfg.de/project/511488495?lang=en) at the [Heidelberg University Biochemistry Center (BZH)](https://bzh.db-engine.de/) and is built on top of the [elAPI](https://github.com/uhd-urz/elAPI) framework.
+
 ---
 
 ## Features
