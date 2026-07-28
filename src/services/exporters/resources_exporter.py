@@ -30,8 +30,16 @@ class ResourcesExporter(BaseExporter):
         offset = start_offset
 
         while True:
+            # full=1 makes eLabFTW return every column of each entry. Without it
+            # the listing endpoint responds with a reduced record that carries
+            # neither `metadata` (extra fields) nor `body`.
             resp = self._endpoint.get(
-                query={"cat": self._category_id, "limit": page_size, "offset": offset},
+                query={
+                    "cat": self._category_id,
+                    "limit": page_size,
+                    "offset": offset,
+                    "full": 1,
+                },
             )
             resp.raise_for_status()
             data = resp.json()
@@ -105,6 +113,24 @@ class ResourcesExporter(BaseExporter):
         ]
         df_clean = df.drop(columns=cols_to_drop + ["metadata"], errors="ignore")
 
+        # `metadata_decoded` duplicates `metadata`; json_normalize expands it into
+        # one column per field *attribute* (type, group_id, description, ...), so
+        # drop it along with any flattened children.
+        df_clean = df_clean.drop(
+            columns=[
+                col
+                for col in df_clean.columns
+                if str(col).split(".")[0] == "metadata_decoded"
+            ],
+            errors="ignore",
+        )
+
+        if "metadata" not in df.columns:
+            logger.warning(
+                "Response has no 'metadata' column — extra fields cannot be "
+                "exported. The API did not return full records (expected full=1)."
+            )
+
         def _safe_metadata(meta: object) -> dict[str, Any]:
             if isinstance(meta, dict):
                 return meta
@@ -129,6 +155,7 @@ class ResourcesExporter(BaseExporter):
             flat = {k: v.get("value") for k, v in fields.items() if isinstance(v, dict)}
             extra.append(flat)
         df_extra = pd.DataFrame(extra, index=df_clean.index)
+        logger.info("Flattened %d extra field column(s)", len(df_extra.columns))
         df_final = pd.concat([df_clean, df_extra], axis=1)
 
         if "body" in df_final.columns:
