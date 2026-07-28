@@ -202,6 +202,10 @@ class ExperimentsImporter(BaseImporter):
         known = {canonicalize_field(name) for name in self._KNOWN_POST_FIELDS}
         if path_col:
             known.add(canonicalize_field(path_col))
+        # The entity-ID column is only used to locate the entry to update; it must
+        # not be written back as an extra field.
+        if self._experiment_id_col:
+            known.add(canonicalize_field(self._experiment_id_col))
         self.post_extra_fields_from_row(
             experiment_id,
             row,
@@ -242,7 +246,12 @@ class ExperimentsImporter(BaseImporter):
             raise ValueError(msg)
 
         for idx, row in self.basic_df.iterrows():
-            experiment_id = self._parse_entity_id(self._experiment_id_col, row, row_index=idx, entity_label="Experiment")
+            experiment_id = self._parse_entity_id(
+                self._experiment_id_col,
+                row,
+                row_index=idx,
+                entity_label="Experiment",
+            )
 
             if not experiment_id:
                 self._skipped_experiments_counter += 1

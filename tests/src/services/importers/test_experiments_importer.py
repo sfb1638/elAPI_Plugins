@@ -290,6 +290,45 @@ def test_patch_existing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
     assert called["extra"]
 
 
+def test_patch_existing_id_column_not_written_as_extra_field(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The 'Experiment ID' column only locates the entry; it must not become an extra field."""
+    def fake_get(**kwargs: Any) -> FakeResponse:
+        return FakeResponse(
+            json_data={
+                "metadata": {"extra_fields": {"Custom Field": {"type": "text", "value": ""}}}
+            }
+        )
+
+    patched_extra_keys: list[list[str]] = []
+
+    def fake_patch(**kwargs: Any) -> FakeResponse:
+        data = kwargs.get("data")
+        if isinstance(data, dict) and "metadata" in data:
+            fields = json.loads(data["metadata"]).get("extra_fields", {})
+            patched_extra_keys.append(sorted(fields.keys()))
+        return FakeResponse()
+
+    importer = _make_importer(
+        monkeypatch,
+        tmp_path,
+        ["Experiment ID", "title", "Custom Field"],
+        [["10", "t", "myvalue"]],
+        get=fake_get,
+        patch=fake_patch,
+        update_existing=True,
+    )
+
+    assert importer._experiment_id_col == "Experiment ID"
+    importer.patch_existing("10", importer.basic_df.iloc[0])
+
+    assert patched_extra_keys, "expected a metadata patch"
+    last = patched_extra_keys[-1]
+    assert "Experiment ID" not in last
+    assert "Custom Field" in last
+
+
 def test_patch_existing_with_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """patch_existing attaches files when a path column points to a directory."""
     files_dir = tmp_path / "files"

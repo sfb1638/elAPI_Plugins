@@ -123,6 +123,46 @@ def test_patch_existing_preserves_extra_field_name_case(
     assert "mixed case field" not in patched_metadata["extra_fields"]
 
 
+def test_patch_existing_id_column_not_written_as_extra_field(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The 'Resource ID' column only locates the entry; it must not become an extra field."""
+    metadata = {"extra_fields": {"Custom Field": {"type": "text", "value": ""}}}
+
+    def fake_get(**kwargs: Any) -> FakeResponse:
+        return FakeResponse(json_data={"metadata": json.dumps(metadata)})
+
+    captured: list[dict[str, Any]] = []
+
+    def fake_patch(**kwargs: Any) -> FakeResponse:
+        data = kwargs.get("data")
+        if isinstance(data, dict):
+            captured.append(data)
+        return FakeResponse()
+
+    monkeypatch.setattr(
+        res_module,
+        "get_fixed",
+        lambda name: FakeEndpoint(get=fake_get, patch=fake_patch),
+    )
+
+    csv_path = write_csv(
+        tmp_path / "res.csv",
+        ["Resource ID", "title", "Custom Field"],
+        [["5", "t", "myvalue"]],
+    )
+    importer = res_module.ResourcesImporter(csv_path, update_existing=True)
+    assert importer._resource_id_col == "Resource ID"
+
+    importer.patch_existing("5", importer.basic_df.iloc[0])
+
+    metadata_payloads = [d for d in captured if "metadata" in d]
+    assert metadata_payloads
+    fields = json.loads(metadata_payloads[-1]["metadata"])["extra_fields"]
+    assert "Resource ID" not in fields
+    assert "Custom Field" in fields
+
+
 def test_patch_existing_delete_V_clears_extra_field_metadata(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
