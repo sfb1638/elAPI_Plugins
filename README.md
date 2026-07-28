@@ -44,7 +44,7 @@ The project is developed as part of the **INF Project**  of [CRC 1638](https://w
 - Create new resources or experiments from CSV files.
 - Update existing entries by providing entity IDs in the CSV.
 - Supported fields per entry:
-
+ 
   | Field | Details |
   |-------|---------|
   | Title, main text (body), date | Standard entry fields. Body accepts plain text or HTML. |
@@ -52,7 +52,7 @@ The project is developed as part of the **INF Project**  of [CRC 1638](https://w
   | Tags | Via the eLabFTW `/tags` sub-endpoint. |
   | File attachments | Single files or entire directories. |
   | Extra fields | Matched to existing template fields with type coercion. |
-  | Entity links | Experiment-to-experiment and experiment-to-resource links. |
+  | Entity links | Experiment-to-experiment, experiment-to-resource, resource-to-experiment and resource-to-resource links. |
 
 - Intelligent column matching: tolerates non-breaking spaces, tabs, and case variations.
 - Automatic delimiter detection for CSV files (comma, semicolon, tab, pipe).
