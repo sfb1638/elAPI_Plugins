@@ -35,6 +35,9 @@ class ResourcesImporter(BaseImporter):
     """Importer for the ElabFTW ``resources`` endpoint."""
 
     _KNOWN_POST_FIELDS: set[str] = set(CONFIG["known_post_fields"])
+    # Set in __init__ when update-existing is enabled; declared here so the
+    # attribute always exists.
+    _resource_id_col: str | None = None
 
     def __init__(
         self,

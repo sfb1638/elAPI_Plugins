@@ -35,6 +35,9 @@ class ExperimentsImporter(BaseImporter):
     """Importer for the ElabFTW ``experiments`` endpoint."""
 
     _KNOWN_POST_FIELDS: set[str] = set(CONFIG["known_post_fields"])
+    # Set in __init__ when update-existing is enabled; declared here so the
+    # attribute always exists.
+    _experiment_id_col: str | None = None
 
     def __init__(
         self,
