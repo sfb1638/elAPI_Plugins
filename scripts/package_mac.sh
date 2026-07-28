@@ -76,24 +76,25 @@ if [ ! -d "$ELAPI_SUPPORTED_VERSIONS_DIR" ]; then
   exit 1
 fi
 
-# Assemble data files
+# Assemble the PyInstaller arguments in a single array. An unquoted string would
+# word-split paths containing spaces ("/Users/Jane Doe/...") and PyInstaller would
+# then reject the fragment with "Wrong syntax, should be --add-data=SOURCE:DEST".
+# Keeping everything in one array also avoids expanding an empty array, which is
+# an "unbound variable" error under `set -u` in the bash 3.2 shipped with macOS.
 # NOTE: On macOS, PyInstaller expects --add-data 'SRC:DEST'
-DATA_ARGS="--add-data gui/templates:templates"
-[ -d "gui/static" ] && DATA_ARGS="$DATA_ARGS --add-data gui/static:static"
-DATA_ARGS="$DATA_ARGS --add-data $ELAPI_VERSION_FILE:elapi"
-DATA_ARGS="$DATA_ARGS --add-data ${ELAPI_SUPPORTED_VERSIONS_DIR}:elapi/api/_supported_versions"
-[ -d "config" ] && DATA_ARGS="$DATA_ARGS --add-data config:config"
+PYI_ARGS=(--clean --windowed --name "$APP_NAME")
 
 # Optional icon
-ICON_ARG=""
-[ -f gui/assets/app.icns ] && ICON_ARG="--icon gui/assets/app.icns"
+[ -f gui/assets/app.icns ] && PYI_ARGS+=(--icon "gui/assets/app.icns")
+
+PYI_ARGS+=(--add-data "gui/templates:templates")
+[ -d "gui/static" ] && PYI_ARGS+=(--add-data "gui/static:static")
+PYI_ARGS+=(--add-data "${ELAPI_VERSION_FILE}:elapi")
+PYI_ARGS+=(--add-data "${ELAPI_SUPPORTED_VERSIONS_DIR}:elapi/api/_supported_versions")
+[ -d "config" ] && PYI_ARGS+=(--add-data "config:config")
 
 # Build the .app
-python -m PyInstaller --clean --windowed \
-  --name "$APP_NAME" \
-  $ICON_ARG \
-  $DATA_ARGS \
-  "$ENTRYPOINT"
+python -m PyInstaller "${PYI_ARGS[@]}" "$ENTRYPOINT"
 
 echo "✅ App built: dist/${APP_NAME}.app"
 
