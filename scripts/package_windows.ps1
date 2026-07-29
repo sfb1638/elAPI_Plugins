@@ -30,15 +30,54 @@ if (Test-Path $BUILD_ENV) { Remove-Item -Path $BUILD_ENV -Recurse -Force }
 if (Test-Path "build") { Remove-Item -Path "build" -Recurse -Force }
 if (Test-Path "dist") { Remove-Item -Path "dist" -Recurse -Force }
 
+# Locate a usable interpreter. A bare "python" on Windows is often the Microsoft
+# Store alias, which is not a real interpreter, so prefer the py launcher and
+# resolve the actual executable before relying on it.
+Write-Host "Locating Python interpreter..." -ForegroundColor Yellow
+$PythonExe = $null
+
+if (Get-Command py -ErrorAction SilentlyContinue) {
+    $resolved = & py -3 -c "import sys; print(sys.executable)" 2>$null
+    if ($LASTEXITCODE -eq 0 -and $resolved) { $PythonExe = "$resolved".Trim() }
+}
+if (-not $PythonExe -and (Get-Command python -ErrorAction SilentlyContinue)) {
+    $resolved = & python -c "import sys; print(sys.executable)" 2>$null
+    if ($LASTEXITCODE -eq 0 -and $resolved) { $PythonExe = "$resolved".Trim() }
+}
+if (-not $PythonExe) {
+    Write-Error @"
+No usable Python interpreter found.
+Install Python 3.11+ from https://www.python.org/downloads/windows/ and tick
+"Add python.exe to PATH" during setup. If 'python' opens the Microsoft Store,
+disable the alias under Settings > Apps > Advanced app settings >
+App execution aliases.
+"@
+    exit 1
+}
+Write-Host "Using Python: $PythonExe" -ForegroundColor Green
+
 # Create fresh virtual environment for building
 Write-Host "Creating virtual environment..." -ForegroundColor Yellow
-python -m venv $BUILD_ENV
-& ".\$BUILD_ENV\Scripts\Activate.ps1"
+& $PythonExe -m venv $BUILD_ENV
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Failed to create the virtual environment in $BUILD_ENV"
+    exit 1
+}
+
+# Call the environment's interpreter directly rather than activating it, so the
+# build cannot silently fall back to a different Python.
+$VenvPython = Join-Path $BUILD_ENV "Scripts\python.exe"
+if (-not (Test-Path $VenvPython)) {
+    Write-Error "Virtual environment is missing an interpreter: $VenvPython"
+    exit 1
+}
 
 # Upgrade pip and install build tools
 Write-Host "Installing build dependencies..." -ForegroundColor Yellow
-python -m pip install --upgrade pip wheel setuptools
-pip install . pyinstaller
+& $VenvPython -m pip install --upgrade pip wheel setuptools
+if ($LASTEXITCODE -ne 0) { Write-Error "Failed to upgrade pip/wheel/setuptools"; exit 1 }
+& $VenvPython -m pip install . pyinstaller
+if ($LASTEXITCODE -ne 0) { Write-Error "Failed to install the project and PyInstaller"; exit 1 }
 
 # Verify Python architecture matches requested architecture
 Write-Host "Verifying Python architecture..." -ForegroundColor Yellow
@@ -47,7 +86,7 @@ import struct
 print('x64' if struct.calcsize('P') == 8 else 'x86')
 '@
 
-$PY_ARCH = python -c $archScript
+$PY_ARCH = & $VenvPython -c $archScript
 
 if ($PY_ARCH -ne $Architecture) {
     Write-Error "Python arch ($PY_ARCH) != requested arch ($Architecture). Make sure you're using the correct Python version."
@@ -68,7 +107,7 @@ root = pathlib.Path(spec.origin).parent
 print(str((root / 'VERSION').resolve()))
 '@
 
-$ELAPI_VERSION_FILE = python -c $pythonScript
+$ELAPI_VERSION_FILE = & $VenvPython -c $pythonScript
 
 if (-not (Test-Path $ELAPI_VERSION_FILE)) {
     Write-Error "ERROR: elapi VERSION file not found: $ELAPI_VERSION_FILE"
@@ -85,7 +124,7 @@ d = root / 'api' / '_supported_versions'
 print(str(d.resolve()))
 '@
 
-$ELAPI_SUPPORTED_VERSIONS_DIR = python -c $pythonScript2
+$ELAPI_SUPPORTED_VERSIONS_DIR = & $VenvPython -c $pythonScript2
 
 if (-not (Test-Path $ELAPI_SUPPORTED_VERSIONS_DIR)) {
     Write-Error "ERROR: elapi supported versions dir not found: $ELAPI_SUPPORTED_VERSIONS_DIR"
@@ -135,7 +174,7 @@ $pyinstaller_cmd = @(
     "--collect-all", "pandas"
 ) + $ICON_ARG + $DATA_ARGS + @($ENTRYPOINT)
 
-& python $pyinstaller_cmd
+& $VenvPython $pyinstaller_cmd
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "PyInstaller build failed"
