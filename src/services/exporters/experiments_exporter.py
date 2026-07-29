@@ -94,6 +94,31 @@ class ExperimentsExporter(BaseExporter):
             "locked",
             "timestamped",
             "team",
+            # Internal identifiers and bookkeeping (already dropped for resources)
+            "elabid",
+            "lockedby",
+            "lastchangeby",
+            "timestampedby",
+            "timestamped_at",
+            "recent_comment",
+            "next_step",
+            # Permissions and plumbing
+            "canread",
+            "canwrite",
+            "canread_base",
+            "canwrite_base",
+            "canread_is_immutable",
+            "canwrite_is_immutable",
+            "hide_main_text",
+            "created_from_id",
+            "created_from_type",
+            "is_pinned",
+            # Duplicate of `tags`
+            "tags_decoded",
+            # Signing
+            "signature_count",
+            "last_signed_at",
+            "last_signed_by",
         ]
 
         df_clean = df.drop(columns=cols_to_drop + ["metadata"], errors="ignore")

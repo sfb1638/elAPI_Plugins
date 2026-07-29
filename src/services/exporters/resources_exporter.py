@@ -110,6 +110,27 @@ class ResourcesExporter(BaseExporter):
             "lastname",
             "orcid",
             "up_item_id",
+            # Permissions and plumbing
+            "canread_base",
+            "canwrite_base",
+            "canbook_base",
+            "canread_is_immutable",
+            "canwrite_is_immutable",
+            "hide_main_text",
+            "created_from_id",
+            "created_from_type",
+            "is_pinned",
+            # Duplicate of `tags`
+            "tags_decoded",
+            # Signing
+            "signature_count",
+            "last_signed_at",
+            "last_signed_by",
+            # Booking
+            "booking_window_days",
+            "booking_hourly_rate_notax",
+            "booking_hourly_rate_tax",
+            "booking_hourly_rate_currency",
         ]
         df_clean = df.drop(columns=cols_to_drop + ["metadata"], errors="ignore")
 
