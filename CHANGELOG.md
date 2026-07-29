@@ -38,9 +38,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   parameters and includes both in the output file name.
 - Packaging metadata (version, maintainer, description, URL) is read from
   `pyproject.toml` so it cannot drift from the project version.
+- The `.xlsx` exports no longer contain eLabFTW's internal permission, booking,
+  signing and bookkeeping columns. Both exports now share the same standard
+  columns — `id`, `title`, `date`, `body`, `tags`, `category_title`,
+  `status_title`, `fullname`, `team_name`, `modified_at`, `rating` — followed by
+  the entry's extra fields.
 
 ### Fixed
 
+- **Exports contained no extra fields and no main text.** eLabFTW's listing
+  endpoints return a reduced record that carries neither `metadata` nor `body`,
+  so the extra-field flattening silently produced nothing. Full records are now
+  requested with the `full=1` query parameter.
+- **Updating an entry that already had a main text did nothing at all.** The
+  entry PATCH also re-sent the entire unchanged metadata — tens of kilobytes for
+  template-based entries — and when the request was rejected the body update was
+  lost with it, so the row was skipped without visible cause. The metadata is
+  written separately, so it is no longer included, and a failing PATCH now logs
+  the server's status and response.
 - Entity links created through the API failed silently. eLabFTW requires an
   `{"action": "create"}` body on the links sub-endpoint; without it the API
   returned HTTP 500 and no link was created, while the import reported success.
@@ -59,6 +74,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   at the wrong path and silently skipped.
 - The macOS build names the `.dmg` as documented and tolerates either PyInstaller
   bundle layout when verifying the packaged `elapi` data files.
+- The macOS build failed with `argument --add-data: Wrong syntax` when the
+  project or interpreter path contained a space; the PyInstaller arguments are
+  no longer word-split.
 - `LICENSE` contained text copied from a GitHub project page; it now holds only
   the AGPL-3.0 licence text.
 
