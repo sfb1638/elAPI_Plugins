@@ -370,8 +370,12 @@ def test_patch_existing_with_single_file(monkeypatch: pytest.MonkeyPatch, tmp_pa
     assert called["attach"] == 1
 
 
-def test_patch_existing_with_string_metadata(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """patch_existing handles metadata stored as a JSON string."""
+def test_patch_existing_does_not_resend_metadata(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The entry PATCH carries no metadata — it is written separately by
+    post_extra_fields_from_row, so existing fields cannot be clobbered and the
+    request stays small. String-stored metadata must not break this path."""
     metadata_str = json.dumps({"extra_fields": {"Field1": {"type": "text", "value": "old"}}})
 
     def fake_get(**kwargs: Any) -> FakeResponse:
@@ -395,10 +399,8 @@ def test_patch_existing_with_string_metadata(monkeypatch: pytest.MonkeyPatch, tm
     importer.patch_existing("1", importer.basic_df.iloc[0])
 
     assert len(captured) >= 1
-    assert "metadata" in captured[0]
-    patched_metadata = json.loads(captured[0]["metadata"])
-    assert "Field1" in patched_metadata["extra_fields"]
-    assert "field1" not in patched_metadata["extra_fields"]
+    assert all("metadata" not in data for data in captured)
+    assert captured[0]["title"] == "t"
 
 
 def test_patch_existing_with_date(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -668,11 +670,13 @@ def test_patch_existing_rename_collision_is_skipped(
 
     importer.patch_existing("1", importer.basic_df.iloc[0])
 
-    fields = json.loads(
-        [d for d in captured if "metadata" in d][-1]["metadata"]
-    )["extra_fields"]
-    assert fields["Custom Field"] == {"value": "a"}
-    assert fields["Target"] == {"value": "b"}
+    # The rename is skipped, so nothing changed and no metadata is written at all
+    # — leaving both fields exactly as they were.
+    metadata_payloads = [d for d in captured if "metadata" in d]
+    if metadata_payloads:
+        fields = json.loads(metadata_payloads[-1]["metadata"])["extra_fields"]
+        assert fields["Custom Field"] == {"value": "a"}
+        assert fields["Target"] == {"value": "b"}
 
 
 def test_patch_existing_rename_nonexistent_field_noop(

@@ -168,25 +168,25 @@ class ExperimentsImporter(BaseImporter):
         if date := self._normalize_date(row):
             payload["date"] = date
 
-        raw_metadata = existing_json.get("metadata") or {}
-
-        if isinstance(raw_metadata, str):
-            try:
-                metadata = json.loads(raw_metadata)
-            except Exception:
-                metadata = {}
-        else:
-            metadata = raw_metadata
-
-        metadata.setdefault("extra_fields", {})
-
-        metadata_str = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
-        payload["metadata"] = metadata_str
-
+        # The entry's metadata is patched separately by post_extra_fields_from_row
+        # below. Re-sending it unchanged here only inflated the request (template
+        # metadata runs to tens of kilobytes) and risked the whole PATCH — and with
+        # it the body update — being rejected.
         response = None
         if payload:
             response = self.endpoint.patch(endpoint_id=experiment_id, data=payload)
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except Exception:
+                logger.error(
+                    "PATCH failed for experiment %s: %s %s | fields=%s body_len=%s",
+                    experiment_id,
+                    getattr(response, "status_code", "?"),
+                    getattr(response, "text", ""),
+                    sorted(payload),
+                    len(str(payload.get("body", ""))),
+                )
+                raise
 
         tags_list = self._get_tags(row)
         self.append_tags(
