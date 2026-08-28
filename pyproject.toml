@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "elapi-plugins"
-version = "1.2.0"
+version = "1.3.0b1"
 description = "Plugin tools for eLabFTW and Labfolder migration, developed as part of the INF Project of CRC 1638 at Heidelberg University"
 readme = "README.md"
 requires-python = ">=3.11"

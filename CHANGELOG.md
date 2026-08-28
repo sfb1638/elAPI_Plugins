@@ -5,6 +5,46 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0b1] — 2026-08-28
+
+Beta release. The two new capabilities below are only lightly tested against a
+live instance — please report anything that misbehaves.
+
+### Added
+
+- **Read and write permissions from the CSV.** New columns `canread_base` /
+  `canwrite_base` (the eLabFTW levels 10–50, or the words `owner`, `admins`,
+  `team`, `everyone`, `public`) together with `canread_users`, `canread_teams`
+  and `canread_teamgroups` (and their `canwrite` counterparts). They apply both
+  when creating and when updating an entry. Only the lists actually filled in
+  are replaced, so granting a user access never drops teams set elsewhere, and
+  an invalid level or a non-numeric ID is skipped with a warning rather than
+  sent.
+- **Importing and patching templates.** Resource templates (`items_types`) and
+  experiment templates (`experiments_templates`) can now be created and updated
+  from a CSV through the same engine as entries, keyed on a `Template ID`
+  column when updating. Title, main text, extra fields, tags and permissions all
+  behave as they do for entries, including the `$delete_V`, `$delete_F` and
+  `$rename$` markers — which makes it possible to rename or remove a field in a
+  large template without clicking through the interface. Templates have no
+  uploads or link sub-endpoints in eLabFTW, so attachment and link columns are
+  ignored with a warning instead of being sent.
+
+### Fixed
+
+- Numeric ID columns tolerate the quote characters spreadsheets leave in a cell:
+  a value typed as `"351, 352"` used to parse to nothing.
+- The Windows build failed at "Creating virtual environment" when `python`
+  resolved to the Microsoft Store alias. The build now locates a real
+  interpreter (preferring the `py` launcher), calls the build environment
+  directly instead of activating it, and stops at the first failing step.
+
+### Changed
+
+- Two comments no longer matched the code and were corrected: the rename prefix
+  was still documented as `$rename->`, and the `patch_existing` docstrings still
+  claimed tags are replaced although they are appended.
+
 ## [1.2.0] — 2026-07-28
 
 ### Added
@@ -104,6 +144,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First stable release: export resources and experiments to `.xlsx`, import
   entries from CSV, and a local web GUI.
 
+[1.3.0b1]: https://github.com/sfb1638/elAPI_Plugins/compare/v1.2.0...v1.3.0b1
 [1.2.0]: https://github.com/sfb1638/elAPI_Plugins/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/sfb1638/elAPI_Plugins/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/sfb1638/elAPI_Plugins/compare/v1.0.0...v1.0.1
