@@ -41,6 +41,35 @@ def link_key(name: str) -> str:
     return canonicalize(name).replace("_", "")
 
 
+# Permissions are two API fields per action: `<field>_base` (an integer level) and
+# `<field>` (a JSON string listing users/teams/teamgroups). In the CSV each part
+# gets its own column — canread_base, canread_users, canread_teams, ... — so that
+# nobody has to hand-write JSON in a spreadsheet cell.
+PERMISSION_FIELDS: tuple[str, ...] = ("canread", "canwrite")
+PERMISSION_LIST_KEYS: tuple[str, ...] = ("users", "teams", "teamgroups")
+
+# Accepted spellings for the base level. eLabFTW uses 10/20/30/40/50; the words
+# are offered because the numbers are not self-explanatory.
+PERMISSION_BASE_LEVELS: dict[str, int] = {
+    "10": 10, "owner": 10, "owneronly": 10,
+    "20": 20, "admins": 20, "owneradmins": 20,
+    "30": 30, "team": 30, "teammembers": 30,
+    "40": 40, "everyone": 40, "allaccounts": 40,
+    "50": 50, "public": 50, "anonymous": 50,
+}
+
+
+def permission_key(name: str) -> str:
+    """Canonicalize a column header for permission matching."""
+    return canonicalize(name).replace("_", "")
+
+
+def parse_permission_level(raw: Any) -> int | None:
+    """Return the numeric base permission level, or None when unrecognised."""
+    text = re.sub(r"[^0-9a-z]", "", str(raw).strip().lower())
+    return PERMISSION_BASE_LEVELS.get(text) if text else None
+
+
 class BaseImporter(ABC):
     """Shared helpers for importer subclasses (ids, columns, tags, files, extras)."""
 
@@ -256,7 +285,10 @@ class BaseImporter(ABC):
         except (TypeError, ValueError):
             return None
 
-        text = str(value).replace("\u00a0", " ").strip()
+        # Spreadsheets happily leave quote characters inside a cell (a value typed
+        # as "351, 352" arrives as '"351, 352"'), so strip them before parsing \u2014
+        # quotes are never meaningful in a numeric ID.
+        text = str(value).replace("\u00a0", " ").strip().strip("\"'").strip()
         if not text:
             return None
 
@@ -450,10 +482,114 @@ class BaseImporter(ABC):
             extras[ckey] = (col, sval)
         return extras
 
+    def find_permission_columns(self, row: pd.Series) -> dict[str, str]:
+        """Map ``"<field><subkey>"`` (e.g. ``canreadusers``) to the CSV column name.
+
+        Matching ignores case, spaces and underscores, so ``canread_users``,
+        ``Canread Users`` and ``canreadusers`` are all recognised.
+        """
+        wanted = {
+            f"{field}{part}"
+            for field in PERMISSION_FIELDS
+            for part in ("base", *PERMISSION_LIST_KEYS)
+        }
+        found: dict[str, str] = {}
+        for col in row.index:
+            if not isinstance(col, str):
+                continue
+            key = permission_key(col)
+            if key in wanted and key not in found:
+                found[key] = col
+        return found
+
+    @staticmethod
+    def _parse_permission_json(raw: Any) -> dict[str, list[int]]:
+        """Return the users/teams/teamgroups lists stored in a permission field."""
+        result: dict[str, list[int]] = {key: [] for key in PERMISSION_LIST_KEYS}
+
+        parsed: Any = None
+        if isinstance(raw, dict):
+            parsed = raw
+        elif isinstance(raw, str) and raw.strip():
+            try:
+                parsed = json.loads(raw)
+            except Exception:
+                logger.debug("Could not parse permission JSON %r", raw, exc_info=True)
+
+        if isinstance(parsed, dict):
+            for key in PERMISSION_LIST_KEYS:
+                value = parsed.get(key)
+                if isinstance(value, list):
+                    result[key] = [v for v in value if isinstance(v, int)]
+        return result
+
+    def build_permission_payload(
+        self, row: pd.Series, existing_json: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Build the canread/canwrite payload entries described by the row.
+
+        Only the columns actually present and filled in are applied; the lists
+        that are not given keep whatever the entry already has, so filling in
+        ``canread_users`` never silently drops the teams someone set in the UI.
+        """
+        columns = self.find_permission_columns(row)
+        if not columns:
+            return {}
+
+        existing_json = existing_json or {}
+        payload: dict[str, Any] = {}
+
+        def cell(column: str | None) -> Any | None:
+            """Return the cell value, or None when absent/empty."""
+            if not column or column not in row:
+                return None
+            value = row[column]
+            if value is None or (isinstance(value, float) and pd.isna(value)):
+                return None
+            return value if str(value).strip() else None
+
+        for field in PERMISSION_FIELDS:
+            base_value = cell(columns.get(f"{field}base"))
+            if base_value is not None:
+                level = parse_permission_level(base_value)
+                if level is None:
+                    logger.warning(
+                        "Ignoring %r: %r is not a valid permission level "
+                        "(use 10/20/30/40/50 or owner/admins/team/everyone/public).",
+                        columns.get(f"{field}base"),
+                        base_value,
+                    )
+                else:
+                    payload[f"{field}_base"] = level
+
+            provided: dict[str, list[int]] = {}
+            for part in PERMISSION_LIST_KEYS:
+                column = columns.get(f"{field}{part}")
+                raw_value = cell(column)
+                if raw_value is None:
+                    continue
+                ids = self._parse_link_ids(raw_value)
+                if not ids:
+                    logger.warning(
+                        "Ignoring %r: %r contains no usable numeric IDs.",
+                        column,
+                        raw_value,
+                    )
+                    continue
+                provided[part] = ids
+
+            if provided:
+                merged = self._parse_permission_json(existing_json.get(field))
+                merged.update(provided)
+                payload[field] = json.dumps(merged, separators=(",", ":"))
+                logger.info("Setting %s to %s", field, merged)
+
+        return payload
+
     def _extract_known_post_fields(
         self, row: pd.Series, template: int | str | None
     ) -> dict[str, Any]:
-        """Build POST payload from template and body."""
+        """Build POST payload from template, body and permissions."""
         data: dict[str, Any] = {}
 
         effective_template = (
@@ -469,6 +605,9 @@ class BaseImporter(ABC):
             body_val = row[body_col]
             if not pd.isna(body_val) and str(body_val).strip():
                 data["body"] = str(body_val)
+
+        # A new entry has no existing permissions to merge with.
+        data.update(self.build_permission_payload(row))
 
         return data
 
@@ -1165,6 +1304,10 @@ class BaseImporter(ABC):
         known = {canonicalize(name) for name in self._KNOWN_POST_FIELDS}
         if path_col:
             known.add(canonicalize(path_col))
+        # Permission columns are sent as canread/canwrite, never as extra fields.
+        known |= {
+            canonicalize(col) for col in self.find_permission_columns(row).values()
+        }
         self.post_extra_fields_from_row(entity_id, row, known_columns=known)
 
         self._increment_new_counter()

@@ -2167,3 +2167,153 @@ def test_post_links_failure_logged(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
 
     # Should not raise
     importer._post_links("1", [("experiments_links", [5])])
+
+
+# ---------------------------------------------------------------------------
+# Permissions (canread / canwrite)
+# ---------------------------------------------------------------------------
+
+def _permission_importer(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    headers: list[str],
+    values: list[Any],
+    captured: list[dict],
+) -> Any:
+    existing = {
+        "canread": json.dumps({"teams": [7], "users": [], "teamgroups": []}),
+        "canwrite": json.dumps({"teams": [], "users": [9], "teamgroups": []}),
+        "metadata": json.dumps({"extra_fields": {"Custom Field": {"value": ""}}}),
+    }
+
+    def fake_get(**kwargs: Any) -> FakeResponse:
+        return FakeResponse(json_data=existing)
+
+    def fake_patch(**kwargs: Any) -> FakeResponse:
+        captured.append(kwargs.get("data") or {})
+        return FakeResponse()
+
+    importer = _make_importer(
+        monkeypatch, tmp_path, headers, [values],
+        get=fake_get, patch=fake_patch,
+    )
+    monkeypatch.setattr(importer, "append_tags", lambda *a, **kw: None)
+    return importer
+
+
+def test_permissions_merge_with_existing_lists(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Filling in only canread_users keeps the teams the entry already had."""
+    captured: list[dict] = []
+    importer = _permission_importer(
+        monkeypatch, tmp_path, ["title", "canread_users"], ["t", "42, 32"], captured
+    )
+
+    importer.patch_existing("1", importer.basic_df.iloc[0])
+
+    payload = next(d for d in captured if "canread" in d)
+    assert json.loads(payload["canread"]) == {
+        "users": [42, 32],
+        "teams": [7],
+        "teamgroups": [],
+    }
+
+
+def test_permission_base_accepts_words_and_numbers(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured: list[dict] = []
+    importer = _permission_importer(
+        monkeypatch, tmp_path,
+        ["title", "canread_base", "canwrite_base"], ["t", "team", "20"],
+        captured,
+    )
+
+    importer.patch_existing("1", importer.basic_df.iloc[0])
+
+    payload = next(d for d in captured if "canread_base" in d)
+    assert payload["canread_base"] == 30
+    assert payload["canwrite_base"] == 20
+
+
+def test_permission_columns_are_not_extra_fields(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Permission columns must never land in metadata.extra_fields."""
+    captured: list[dict] = []
+    importer = _permission_importer(
+        monkeypatch, tmp_path,
+        ["title", "canread_base", "canread_users"], ["t", "30", "42"],
+        captured,
+    )
+
+    importer.patch_existing("1", importer.basic_df.iloc[0])
+
+    for data in captured:
+        if "metadata" in data:
+            fields = json.loads(data["metadata"])["extra_fields"]
+            assert not [k for k in fields if k.lower().startswith("can")]
+
+
+def test_invalid_permission_level_is_ignored(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured: list[dict] = []
+    importer = _permission_importer(
+        monkeypatch, tmp_path, ["title", "canread_base"], ["t", "bogus"], captured
+    )
+
+    importer.patch_existing("1", importer.basic_df.iloc[0])
+
+    assert all("canread_base" not in d for d in captured)
+
+
+def test_empty_permission_cells_change_nothing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured: list[dict] = []
+    importer = _permission_importer(
+        monkeypatch, tmp_path,
+        ["title", "canread_base", "canread_users"], ["t", "", ""],
+        captured,
+    )
+
+    importer.patch_existing("1", importer.basic_df.iloc[0])
+
+    assert all("canread" not in d and "canread_base" not in d for d in captured)
+
+
+def test_permissions_applied_on_create(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A new entry gets its permissions in the creation payload."""
+    posted: list[dict] = []
+
+    def fake_post(**kwargs: Any) -> FakeResponse:
+        if not kwargs.get("sub_endpoint_name"):
+            posted.append(kwargs.get("data") or {})
+        return FakeResponse(headers={"Location": "http://x/experiments/7"})
+
+    importer = _make_importer(
+        monkeypatch, tmp_path,
+        ["title", "canread_base", "canread_users"], [["t", "40", "1,2"]],
+        post=fake_post,
+    )
+    monkeypatch.setattr(importer, "post_extra_fields_from_row", lambda *a, **kw: None)
+    monkeypatch.setattr(importer, "replace_tags", lambda *a, **kw: None)
+
+    importer.create_new(importer.basic_df.iloc[0])
+
+    assert posted
+    assert posted[0]["canread_base"] == 40
+    assert json.loads(posted[0]["canread"])["users"] == [1, 2]
+
+
+def test_parse_link_ids_tolerates_quoted_cells() -> None:
+    """Spreadsheets leave quotes inside cells; they must not break ID parsing."""
+    parse = exp_module.ExperimentsImporter._parse_link_ids
+    assert parse('"351, 352"') == [351, 352]
+    assert parse("'351;352'") == [351, 352]
+    assert parse('"351"') == [351]
+    assert parse('"abc"') == []

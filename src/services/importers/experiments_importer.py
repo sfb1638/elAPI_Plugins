@@ -168,6 +168,9 @@ class ExperimentsImporter(BaseImporter):
         if date := self._normalize_date(row):
             payload["date"] = date
 
+        # Permissions: only the lists given in the CSV are replaced.
+        payload.update(self.build_permission_payload(row, existing_json))
+
         # The entry's metadata is patched separately by post_extra_fields_from_row
         # below. Re-sending it unchanged here only inflated the request (template
         # metadata runs to tens of kilobytes) and risked the whole PATCH — and with
@@ -209,6 +212,10 @@ class ExperimentsImporter(BaseImporter):
         # not be written back as an extra field.
         if self._experiment_id_col:
             known.add(canonicalize_field(self._experiment_id_col))
+        known |= {
+            canonicalize_field(col)
+            for col in self.find_permission_columns(row).values()
+        }
         self.post_extra_fields_from_row(
             experiment_id,
             row,
