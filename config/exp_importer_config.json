@@ -1,5 +1,8 @@
 {
-  "known_post_fields": ["title", "tags", "category", "status", "template", "date", "body"],
+  "known_post_fields": [
+    "title", "tags", "category", "status", "template", "date", "body", "canread_base", "canread_user",
+    "canread_teams", "canwrite_base", "canwrite_users", "canwrite_teams"
+  ],
   "path_col": [
     "files_path",
     "file_path",
