@@ -1,13 +1,11 @@
-"""Importers for eLabFTW templates (resource templates and experiment templates).
+"""Importers for eLabFTW templates (resource and experiment templates).
 
-Templates are editable entities just like experiments and resources — the API
-describes them with ``entity_template_editable``, which extends the very same
-``entity_editable`` schema. They therefore accept title, body, metadata (i.e. the
-extra-field definitions), permissions and tags.
+The API describes templates with ``entity_template_editable``, which extends the
+same ``entity_editable`` schema as entries, so they accept title, body, metadata
+(the extra-field definitions), permissions and tags.
 
-They do **not** have ``uploads`` or ``*_links`` sub-endpoints, so file
-attachments and entity links are not available for templates; both are switched
-off via the capability flags rather than sent and rejected.
+Templates have no ``uploads`` or ``*_links`` sub-endpoints, so attachments and
+entity links are unavailable and switched off via the capability flags.
 """
 
 from __future__ import annotations

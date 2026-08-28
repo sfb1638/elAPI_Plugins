@@ -220,7 +220,6 @@ def setup() -> str | WerkzeugResponse:
         flash("Configuration saved successfully.", "success")
         return redirect(url_for("index"))
 
-    # GET
     cfg = _read_elapi_config()
     return render_template("setup.html", host=cfg["host"], api_token=cfg["api_token"])
 
@@ -377,7 +376,6 @@ def index() -> str | WerkzeugResponse:
             import_target = (request.form.get("import_target") or "resources").strip().lower()
             logger.info("Import target: %s", import_target)
 
-            # Decide source path
             if import_path:
                 source = os.path.abspath(import_path)
                 if not os.path.isfile(source):

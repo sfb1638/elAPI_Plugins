@@ -41,10 +41,9 @@ def link_key(name: str) -> str:
     return canonicalize(name).replace("_", "")
 
 
-# Permissions are two API fields per action: `<field>_base` (an integer level) and
-# `<field>` (a JSON string listing users/teams/teamgroups). In the CSV each part
-# gets its own column — canread_base, canread_users, canread_teams, ... — so that
-# nobody has to hand-write JSON in a spreadsheet cell.
+# Each permission is two API fields: `<field>_base` (an integer level) and
+# `<field>` (a JSON string of users/teams/teamgroups). The CSV gives each part its
+# own column — canread_base, canread_users, canread_teams, ...
 PERMISSION_FIELDS: tuple[str, ...] = ("canread", "canwrite")
 PERMISSION_LIST_KEYS: tuple[str, ...] = ("users", "teams", "teamgroups")
 
@@ -73,9 +72,8 @@ def parse_permission_level(raw: Any) -> int | None:
 class BaseImporter(ABC):
     """Shared helpers for importer subclasses (ids, columns, tags, files, extras)."""
 
-    # Not every entity supports every sub-endpoint: templates (items_types and
-    # experiments_templates) have no uploads and no entity links, so importers for
-    # them switch these off instead of issuing requests the API would reject.
+    # Templates have no uploads and no *_links sub-endpoints; importers for them
+    # switch these off instead of sending requests the API would reject.
     _SUPPORTS_UPLOADS: bool = True
     _SUPPORTS_LINKS: bool = True
 
@@ -84,12 +82,11 @@ class BaseImporter(ABC):
     _template_id: int | str | None = None
     _default_category: str | None = None
 
-    # Cell-value prefix that renames an existing extra field: "$rename->New Name".
+    # Cell-value prefix that renames an extra field: "$rename$New Name".
     _RENAME_PREFIX: str = "$rename$"
 
-    # Maps link column headers to their elabFTW sub-endpoint names. Keys are
-    # normalized with link_key(), so spaces and underscores are interchangeable
-    # ("experiments links", "Experiments_Links", "experimentslinks" all match).
+    # Link column headers -> sub-endpoint. Keys go through link_key(), so spaces
+    # and underscores are interchangeable ("experiments links", "Experiments_Links").
     _LINK_COLUMN_MAP: dict[str, str] = {
         link_key("experiments links"): "experiments_links",
         link_key("experiment link"): "experiments_links",
@@ -291,9 +288,8 @@ class BaseImporter(ABC):
         except (TypeError, ValueError):
             return None
 
-        # Spreadsheets happily leave quote characters inside a cell (a value typed
-        # as "351, 352" arrives as '"351, 352"'), so strip them before parsing \u2014
-        # quotes are never meaningful in a numeric ID.
+        # Spreadsheets leave quotes inside the cell ("351, 352" arrives as
+        # '"351, 352"'); they are never meaningful in a numeric ID.
         text = str(value).replace("\u00a0", " ").strip().strip("\"'").strip()
         if not text:
             return None
@@ -339,9 +335,8 @@ class BaseImporter(ABC):
         options_set = {str(o).strip() for o in options}
 
         if ftype in {"items", "experiments"}:
-            # eLabFTW stores the linked entity id as a *string* in metadata; a JSON
-            # number (e.g. 2311 instead of "2311") is not rendered as a link. Parse
-            # to a clean integer id (dropping any ".0") then store it as a string.
+            # eLabFTW only renders the link when the id is a JSON *string*:
+            # "2311" works, 2311 does not. Parse to a clean int, store as str.
             parsed = BaseImporter._parse_integer_id(raw)
             return None if parsed is None else str(parsed)
 
@@ -1180,10 +1175,8 @@ class BaseImporter(ABC):
                     )
                     continue
 
-                # For link-type extra fields (items/experiments), eLabFTW's own UI
-                # both stores the id in metadata AND creates a real entity link so
-                # the entry shows in the linked section at the bottom. Mirror that:
-                # setting only the metadata value renders nothing without the link.
+                # eLabFTW's own UI stores the id in metadata *and* creates a real
+                # link; without the link the field renders nothing. Mirror that.
                 ftype = (defn or {}).get("type")
                 if ftype in {"items", "experiments"}:
                     sub_endpoint = (

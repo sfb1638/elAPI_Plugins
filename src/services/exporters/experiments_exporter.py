@@ -31,9 +31,8 @@ class ExperimentsExporter(BaseExporter):
         )
 
         def get_page(limit: int, offset: int) -> list[dict[str, Any]]:
-            # full=1 makes eLabFTW return every column of each entry. Without it
-            # the listing endpoint responds with a reduced record that carries
-            # neither `metadata` (extra fields) nor `body`.
+            # Without full=1 the listing endpoint returns a reduced record
+            # carrying neither `metadata` (extra fields) nor `body`.
             resp = self._endpoint.get(
                 query={"limit": limit, "offset": offset, "full": 1}
             )
@@ -191,4 +190,3 @@ class ExperimentsExporter(BaseExporter):
         logger.info("Exported %d experiments to %s", len(export_data), out_path)
         return out_path
 
-#TODO

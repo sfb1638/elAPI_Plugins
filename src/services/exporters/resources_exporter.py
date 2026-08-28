@@ -30,9 +30,8 @@ class ResourcesExporter(BaseExporter):
         offset = start_offset
 
         while True:
-            # full=1 makes eLabFTW return every column of each entry. Without it
-            # the listing endpoint responds with a reduced record that carries
-            # neither `metadata` (extra fields) nor `body`.
+            # Without full=1 the listing endpoint returns a reduced record
+            # carrying neither `metadata` (extra fields) nor `body`.
             resp = self._endpoint.get(
                 query={
                     "cat": self._category_id,
@@ -134,9 +133,8 @@ class ResourcesExporter(BaseExporter):
         ]
         df_clean = df.drop(columns=cols_to_drop + ["metadata"], errors="ignore")
 
-        # `metadata_decoded` duplicates `metadata`; json_normalize expands it into
-        # one column per field *attribute* (type, group_id, description, ...), so
-        # drop it along with any flattened children.
+        # `metadata_decoded` duplicates `metadata` and json_normalize expands it
+        # into one column per field attribute; drop it and its children.
         df_clean = df_clean.drop(
             columns=[
                 col

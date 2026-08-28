@@ -128,11 +128,11 @@ class ExperimentsImporter(BaseImporter):
     def patch_existing(
         self, experiment_id: str, row: pd.Series, category: str | None = None
     ) -> Any:
-        """
-        Patch an existing experiment.
+        """Patch an existing experiment.
 
-        Tags are replaced via /tags sub-endpoint (same semantics as create_new),
-        because PATCHing {"tags": "..."} often does not update tags in ElabFTW.
+        Title and extra fields overwrite, the body and tags are appended to.
+        Tags go through the /tags sub-endpoint: PATCHing {"tags": "..."} often
+        does not update them.
         """
         payload: dict[str, Any] = {}
 
@@ -171,10 +171,9 @@ class ExperimentsImporter(BaseImporter):
         # Permissions: only the lists given in the CSV are replaced.
         payload.update(self.build_permission_payload(row, existing_json))
 
-        # The entry's metadata is patched separately by post_extra_fields_from_row
-        # below. Re-sending it unchanged here only inflated the request (template
-        # metadata runs to tens of kilobytes) and risked the whole PATCH — and with
-        # it the body update — being rejected.
+        # Metadata is written separately by post_extra_fields_from_row below;
+        # resending it unchanged bloated the request and could sink the whole
+        # PATCH, taking the body update with it.
         response = None
         if payload:
             response = self.endpoint.patch(endpoint_id=experiment_id, data=payload)
