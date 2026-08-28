@@ -59,6 +59,8 @@
     <div id="import-options" class="tab-content" style="display: none">
         <div id="tab-import-res" class="sub-tab-button active" role="button" tabindex="0">Resources</div>
         <div id="tab-import-exp" class="sub-tab-button" role="button" tabindex="0">Experiments</div>
+        <div id="tab-import-tpl-res" class="sub-tab-button" role="button" tabindex="0">Resource templates</div>
+        <div id="tab-import-tpl-exp" class="sub-tab-button" role="button" tabindex="0">Experiment templates</div>
     </div>
 
     <div id="templates-options" class="tab-content" style="display: none">
@@ -241,6 +243,8 @@
             "tab-export-exp": "content-exp",
             "tab-import-res": "content-imp",
             "tab-import-exp": "content-imp",
+            "tab-import-tpl-res": "content-imp",
+            "tab-import-tpl-exp": "content-imp",
             "tab-templates-res": "content-template-res",
             "tab-templates-exp": "content-template-exp"
         };
@@ -329,6 +333,17 @@
                 if (importExpTemplateLabel) importExpTemplateLabel.style.display = "none";
                 if (updateNote) updateNote.textContent =
                     'When enabled, uses the CSV "Resource ID" column to patch existing resources instead of creating new ones.';
+            } else if (tabId === "tab-import-tpl-res" || tabId === "tab-import-tpl-exp") {
+                const isResTpl = tabId === "tab-import-tpl-res";
+                if (importTargetField) importTargetField.value = isResTpl ? "resource_templates" : "experiment_templates";
+                if (importSubmitBtn) importSubmitBtn.textContent = isResTpl ? "Import Resource Templates" : "Import Experiment Templates";
+                // Templates are their own entity: no category and no template picker.
+                if (importCategorySelect) { importCategorySelect.style.display = "none"; importCategorySelect.disabled = true; }
+                if (importCategoryLabel) importCategoryLabel.style.display = "none";
+                if (importExpTemplateSelect) { importExpTemplateSelect.style.display = "none"; importExpTemplateSelect.disabled = true; }
+                if (importExpTemplateLabel) importExpTemplateLabel.style.display = "none";
+                if (updateNote) updateNote.textContent =
+                    'When enabled, uses the CSV "Template ID" column to patch existing templates instead of creating new ones. Templates support title, main text, extra fields, tags and permissions \u2014 attachments and entity links are not available.';
             }
         }
 

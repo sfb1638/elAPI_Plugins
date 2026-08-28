@@ -7,6 +7,10 @@ _ENDPOINT_MAP = {
     "categories": "items_types",
     "experiments": "experiments",
     "experiments_templates": "experiments_templates",
+    # Templates are editable entities in their own right: a resource template is
+    # an items_type, an experiment template an experiments_template.
+    "resource_templates": "items_types",
+    "experiment_templates": "experiments_templates",
 }
 
 

@@ -73,6 +73,12 @@ def parse_permission_level(raw: Any) -> int | None:
 class BaseImporter(ABC):
     """Shared helpers for importer subclasses (ids, columns, tags, files, extras)."""
 
+    # Not every entity supports every sub-endpoint: templates (items_types and
+    # experiments_templates) have no uploads and no entity links, so importers for
+    # them switch these off instead of issuing requests the API would reject.
+    _SUPPORTS_UPLOADS: bool = True
+    _SUPPORTS_LINKS: bool = True
+
     # Subclasses must populate these at construction time.
     _KNOWN_POST_FIELDS: tuple[str, ...] = ()
     _template_id: int | str | None = None
@@ -1200,6 +1206,14 @@ class BaseImporter(ABC):
             elab_extra_fields[new_key] = {"value": raw_val}
             changed[new_key] = raw_val
 
+        if link_ops and not self._SUPPORTS_LINKS:
+            logger.warning(
+                "%s does not support entity links; ignoring %d link column(s).",
+                type(self).__name__,
+                len(link_ops),
+            )
+            link_ops = []
+
         self._post_links(eid, link_ops)
 
         if not changed:
@@ -1293,7 +1307,7 @@ class BaseImporter(ABC):
                 ) from exc
 
         path_col = self._find_path_col()
-        if path_col and path_col in row:
+        if path_col and path_col in row and self._SUPPORTS_UPLOADS:
             folder_path = self._resolve_folder(row[path_col])
 
             if folder_path and folder_path.exists():

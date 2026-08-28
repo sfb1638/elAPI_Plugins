@@ -415,6 +415,16 @@ def index() -> str | WerkzeugResponse:
                     )
                     ids = importer.create_all_from_csv()
                     count = len(ids)
+                elif import_target in ("resource_templates", "experiment_templates"):
+                    # Templates carry no attachments and no entity links; the
+                    # importer skips those columns on its own.
+                    importer = ImporterFactory.get_importer(
+                        import_target,
+                        csv_path=source,
+                        update_existing=update_existing,
+                    )
+                    ids = importer.create_all_from_csv()
+                    count = len(ids)
                 else:
                     flash(f"Unknown import target: {import_target}", "error")
                     return redirect(url_for("index"))
