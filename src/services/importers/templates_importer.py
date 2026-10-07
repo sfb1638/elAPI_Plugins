@@ -271,8 +271,12 @@ class TemplatesImporter(BaseImporter):
 
     def _import_new_templates(self, template: int | str | None) -> list[str]:
         ids: list[str] = []
-        for _, row in self.basic_df.iterrows():
-            ids.append(self.create_new(row=row, template=template))
+        for idx, row in self.basic_df.iterrows():
+            try:
+                ids.append(self.create_new(row=row, template=template))
+            except Exception as exc:
+                self._record_failed_row(idx, exc)
+                self._skipped_templates_counter += 1
         return ids
 
     def _import_update_existing(self) -> list[str]:

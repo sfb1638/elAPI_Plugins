@@ -442,15 +442,19 @@ def index() -> str | WerkzeugResponse:
                     flash(f"Unknown import target: {import_target}", "error")
                     return redirect(url_for("index"))
 
+                skipped = getattr(importer, "skipped_count", 0)
+                suffix = f"; skipped {skipped}" if skipped else ""
                 if update_existing:
-                    skipped = getattr(importer, "skipped_count", 0)
                     flash(
                         f"Updated {count} existing {import_target} from {source}"
-                        + (f"; skipped {skipped}" if skipped else ""),
+                        + suffix,
                         "success",
                     )
                 else:
-                    flash(f"Imported {count} {import_target} from {source}", "success")
+                    flash(
+                        f"Imported {count} {import_target} from {source}" + suffix,
+                        "success",
+                    )
 
                 skipped_rows = getattr(importer, "skipped_rows", [])
                 if skipped_rows:

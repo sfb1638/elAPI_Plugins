@@ -2430,3 +2430,29 @@ def test_create_skips_row_with_invalid_select_value(
     assert importer.skipped_rows[0].row_number == 2
     assert "'Blue' is not an option of 'Color'" in importer.skipped_rows[0].reasons[0]
     assert looked_up == [("experiments_templates", "5")]
+
+
+# ---------------------------------------------------------------------------
+# Regression: bug fixes
+# ---------------------------------------------------------------------------
+
+def test_create_mode_failed_row_does_not_abort_import(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    importer = _make_importer(
+        monkeypatch, tmp_path, ["title"], [["a"], ["b"], ["c"]]
+    )
+
+    def fake_create(row: Any, template: Any = None) -> str:
+        if row["title"] == "b":
+            raise RuntimeError("boom")
+        return row["title"]
+
+    monkeypatch.setattr(importer, "create_new", fake_create)
+
+    assert importer.create_all_from_csv() == ["a", "c"]
+    assert importer.skipped_count == 1
+    assert importer.skipped_rows[0].row_number == 2
+    assert "boom" in importer.skipped_rows[0].reasons[0]
+
+

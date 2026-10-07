@@ -860,6 +860,16 @@ class BaseImporter(ABC):
         self.skipped_rows.append(SkippedRow(row_number, reasons))
         return True
 
+    def _record_failed_row(self, row_index: Any, exc: Exception) -> None:
+        """Log a row whose create/patch raised and report it like a skipped row.
+
+        One bad row must not abort the run: rows already created stay in
+        eLabFTW, and re-running the whole CSV would duplicate them.
+        """
+        row_number = int(row_index) + 1
+        logger.error("Row %d failed: %s", row_number, exc)
+        self.skipped_rows.append(SkippedRow(row_number, (f"Import failed: {exc}",)))
+
     # endregion
 
     # region --- Row field extraction ---

@@ -247,7 +247,11 @@ class ResourcesImporter(BaseImporter):
             if self._should_skip_row(idx, row, template=template):
                 self._skipped_resources_counter += 1
                 continue
-            ids.append(self.create_new(row=row, template=template))
+            try:
+                ids.append(self.create_new(row=row, template=template))
+            except Exception as exc:
+                self._record_failed_row(idx, exc)
+                self._skipped_resources_counter += 1
         return ids
 
     def _import_update_existing(self) -> list[str]:
