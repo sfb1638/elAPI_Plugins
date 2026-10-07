@@ -9,10 +9,20 @@ import time
 import webbrowser
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import pandas as pd
 import yaml
-from flask import Flask, flash, redirect, render_template, request, send_file, url_for
+from flask import (
+    Flask,
+    Response,
+    flash,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    url_for,
+)
 from werkzeug.serving import make_server
 from werkzeug.utils import secure_filename
 from werkzeug.wrappers.response import Response as WerkzeugResponse
@@ -131,6 +141,17 @@ SHUTDOWN_DELAY_SECONDS = 5.0
 _shutdown_timer: threading.Timer | None = None
 _shutdown_lock = threading.Lock()
 
+_LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]", "::1"}
+
+
+def _host_of(value: str) -> str:
+    """Return the lower-cased host (no port) of a Host header or Origin URL."""
+    netloc = urlsplit(value if "//" in value else f"//{value}").netloc.lower()
+    if netloc.startswith("["):
+        return netloc.split("]", 1)[0] + "]"
+    return netloc.rsplit(":", 1)[0] if ":" in netloc else netloc
+
+
 @app.before_request
 def _cancel_pending_shutdown() -> None:
     """Any request other than /shutdown means the page is still in use."""
@@ -140,6 +161,24 @@ def _cancel_pending_shutdown() -> None:
             if _shutdown_timer is not None:
                 _shutdown_timer.cancel()
                 _shutdown_timer = None
+
+
+@app.before_request
+def _guard_local_requests() -> Response | None:
+    """Reject requests a web page on another site could be making.
+
+    The server only listens on loopback, but any website open in the user's
+    browser can still POST to it (CSRF) or reach it via DNS rebinding.
+    """
+    if _host_of(request.host) not in _LOCAL_HOSTS:
+        return Response("Forbidden: unexpected Host header.", status=403)
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        origin = request.headers.get("Origin")
+        if origin and origin != "null" and _host_of(origin) not in _LOCAL_HOSTS:
+            return Response("Forbidden: cross-site request.", status=403)
+        if origin == "null" or request.headers.get("Sec-Fetch-Site") == "cross-site":
+            return Response("Forbidden: cross-site request.", status=403)
+    return None
 
 
 def _build_category_options(

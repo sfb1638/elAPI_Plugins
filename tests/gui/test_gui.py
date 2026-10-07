@@ -445,6 +445,30 @@ def test_import_flashes_warning_for_skipped_rows(
     assert "Row 2: Experiment 200 does not exist" in flashes["warning"]
 
 
+def test_cross_site_post_is_rejected() -> None:
+    gui.app.testing = True
+    client = gui.app.test_client()
+
+    resp = client.post("/shutdown", headers={"Origin": "https://evil.example"})
+    assert resp.status_code == 403
+    resp = client.post("/shutdown", headers={"Sec-Fetch-Site": "cross-site"})
+    assert resp.status_code == 403
+
+
+def test_foreign_host_header_is_rejected() -> None:
+    gui.app.testing = True
+    resp = gui.app.test_client().get("/", headers={"Host": "evil.example:1991"})
+    assert resp.status_code == 403
+
+
+def test_same_origin_post_is_allowed() -> None:
+    gui.app.testing = True
+    resp = gui.app.test_client().post(
+        "/shutdown", headers={"Origin": "http://127.0.0.1:1991"}
+    )
+    assert resp.status_code == 200
+
+
 def test_shutdown_is_delayed_and_cancelled_by_next_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
