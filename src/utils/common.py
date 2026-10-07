@@ -1,6 +1,7 @@
 import json
 import logging
 import math
+import re
 import time
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
@@ -21,16 +22,28 @@ from requests.exceptions import (  # type: ignore[import-untyped]
 logger = logging.getLogger(__name__)
 
 
+_BLOCK_TAGS = (
+    "p", "div", "li", "tr", "pre", "blockquote",
+    "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "table",
+)
+
+
 def strip_html(html_str: str) -> str:
-    """Return plain text from HTML."""
+    """Return plain text from HTML, keeping all text and the block structure."""
     soup = BeautifulSoup(html_str or "", "html.parser")
 
-    paragraphs = soup.find_all("p")
-    if paragraphs:
-        texts = [p.get_text(separator=" ", strip=True) for p in paragraphs]
-        return "\n\n".join(texts)
+    for br in soup.find_all("br"):
+        br.replace_with("\n")
+    for tag in soup.find_all(_BLOCK_TAGS):
+        # Paragraphs are separated by a blank line, other blocks by a newline.
+        tag.append("\n\n" if tag.name == "p" else "\n")
+    for cell in soup.find_all(["td", "th"]):
+        cell.append(" ")
 
-    return soup.get_text(separator=" ", strip=True)
+    text = soup.get_text()
+    lines = [" ".join(line.split(" ")).strip(" \t") for line in text.split("\n")]
+    text = "\n".join(lines)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
 def canonicalize(name: str) -> str:

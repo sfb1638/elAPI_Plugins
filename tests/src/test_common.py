@@ -26,6 +26,15 @@ def test_strip_html_extracts_paragraphs() -> None:
     assert strip_html(html) == "First\n\nSecond\xa0line"
 
 
+def test_strip_html_keeps_text_outside_paragraphs() -> None:
+    html = "<h1>Title</h1><p>para</p><ul><li>one</li><li>two</li></ul>line<br>next"
+    out = strip_html(html)
+    for word in ("Title", "para", "one", "two", "line", "next"):
+        assert word in out
+    assert "one\ntwo" in out
+    assert "line\nnext" in out
+
+
 def test_canonicalize_removes_spaces_and_dashes() -> None:
     assert canonicalize("My Field-Name") == "myfield_name"
 
