@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 import responses
 
 from src.updater.updater import GITHUB_API_LATEST, check_for_update, compare_versions

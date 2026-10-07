@@ -55,6 +55,7 @@ The project is developed as part of the **INF Project**  of [CRC 1638](https://w
   | Entity links | Experiment-to-experiment, experiment-to-resource, resource-to-experiment and resource-to-resource links. |
 
 - Intelligent column matching: tolerates non-breaking spaces, tabs, and case variations.
+- Rows containing values that cannot be used (unknown link targets, select values that are not an option, ...) are skipped and reported instead of being imported half-way — see [Row validation](#row-validation).
 - Automatic delimiter detection for CSV files (comma, semicolon, tab, pipe).
 
 ### CSV Templates
@@ -223,7 +224,7 @@ Recognized link columns (matching ignores case, spaces, and underscores — `exp
 | `experiments links` / `experiment link` | Experiments |
 | `resources links` / `resource link` / `items links` / `item link` | Resources (items) |
 
-Link values are comma- or semicolon-separated numeric IDs (e.g. `12, 34`). Non-numeric values are ignored and a warning is logged. This behaviour is identical whether the entry is being created or updated.
+Link values are comma- or semicolon-separated numeric IDs (e.g. `12, 34`). A value that is not a number, or an ID that does not exist in eLabFTW, causes the whole row to be skipped (see [Row validation](#row-validation)). This behaviour is identical whether the entry is being created or updated.
 
 ### Update behaviour
 
@@ -254,6 +255,25 @@ When in update mode, special marker values can be placed in individual CSV cells
 - `$rename$` must appear at the very start of the cell — ` $rename$X` (leading space) or `rename$X` (no leading `$`) are treated as ordinary text.
 - If a field named `New Name` already exists, the rename is skipped to avoid overwriting it.
 - The `title` column is read before markers are applied, so markers in the `title` cell have no effect.
+
+### Row validation
+
+Before a row is imported, its values are checked against eLabFTW. A row with an invalid value is **skipped entirely** — nothing is created or changed for it — and the import carries on with the remaining rows. When the import finishes, the GUI lists every skipped row with the reason (the first 10; the rest are in `logs/app.log`). Rows are numbered as the Nth data row of the file, header excluded.
+
+| Checked | The row is skipped when |
+|---------|-------------------------|
+| Link columns (`experiments links`, `resources links`, ...) | a value is not a numeric ID, or no such experiment/resource exists |
+| Link-type extra fields (*items* / *experiments*) | the value is not a numeric ID, or no such entry exists |
+| Select extra fields | the value is not one of the field's options (case-insensitive). With *multiple values* allowed, every value must be an option; otherwise at least one must match |
+| Category column | the value is not a number |
+
+Good to know:
+
+- Extra fields are checked against the **template** a new entry is created from (the one picked in the GUI), or against the entry's own fields when updating. Without a template there is nothing to check them against.
+- Only a "not found" answer from eLabFTW counts as a missing entry. If eLabFTW cannot be asked (network error, no permission, server error) the value is **not** flagged and a warning is logged, so a flaky connection never skips good rows.
+- The [update markers](#update-markers) are exempt from the checks.
+- Not checked: whether a category ID exists, number/date/other field types, tags, permission IDs and file paths (a missing file path is logged and the row is still imported).
+- Resource and experiment imports are validated; template imports are not.
 
 ---
 

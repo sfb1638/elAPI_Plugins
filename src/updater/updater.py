@@ -7,8 +7,8 @@ import pathlib
 import platform
 import re
 import sys
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from typing import Callable, Iterable, Mapping, Optional
 
 import requests
 from requests.exceptions import HTTPError
@@ -167,7 +167,7 @@ def get_current_version (fallback: str = "0.0.0") -> str:
     pyproject.
     """
     try:
-        from importlib.metadata import PackageNotFoundError, version
+        from importlib.metadata import version
 
         return version("elapi-plugins")
     except Exception:
@@ -202,7 +202,7 @@ def _auth_headers () -> dict[str, str]:
 def fetch_latest_release (
     etag: str | None = None,
     timeout: int = DEFAULT_TIMEOUT,
-    session: Optional[requests.Session] = None,
+    session: requests.Session | None = None,
     ) -> tuple[dict[str, object] | None, str | None]:
     """
     Fetch the latest release JSON from GitHub.
@@ -217,7 +217,7 @@ def fetch_latest_release (
         return None, etag
     try:
         resp.raise_for_status()
-    except HTTPError as exc:
+    except HTTPError:
         if resp.status_code == 404:
             logger.warning("No releases found at %s", GITHUB_API_LATEST)
             return None, None
@@ -287,7 +287,7 @@ def download_asset (
     url: str,
     dest: pathlib.Path | str,
     *,
-    session: Optional[requests.Session] = None,
+    session: requests.Session | None = None,
     timeout: int = DEFAULT_TIMEOUT,
     chunk_size: int = 1 << 16,
     ) -> pathlib.Path:

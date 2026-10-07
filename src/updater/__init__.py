@@ -1,7 +1,7 @@
 from .updater import (
     UpdateInfo,
-    compare_versions,
     check_for_update,
+    compare_versions,
     download_asset,
     get_current_version,
 )

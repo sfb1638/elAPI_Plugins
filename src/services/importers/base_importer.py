@@ -10,6 +10,7 @@ import os
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -19,6 +20,7 @@ import pandas as pd
 from elapi.api import FixedEndpoint
 
 from src.utils.common import canonicalize, ensure_series
+from src.utils.endpoints import get_fixed
 from src.utils.paths import RES_IMPORTER_CONFIG
 
 try:
@@ -58,6 +60,30 @@ PERMISSION_BASE_LEVELS: dict[str, int] = {
 }
 
 
+@dataclass(frozen=True)
+class RowIssue:
+    """One CSV cell that points at something that cannot be used."""
+
+    column: str
+    value: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class SkippedRow:
+    """A CSV row left out of the import, with the reasons why."""
+
+    row_number: int
+    reasons: tuple[str, ...]
+
+
+# Link sub-endpoint -> (endpoint to look the target up on, label for messages).
+_LINK_TARGETS: dict[str, tuple[str, str]] = {
+    "experiments_links": ("experiments", "Experiment"),
+    "items_links": ("resources", "Resource"),
+}
+
+
 def permission_key(name: str) -> str:
     """Canonicalize a column header for permission matching."""
     return canonicalize(name).replace("_", "")
@@ -81,6 +107,13 @@ class BaseImporter(ABC):
     _KNOWN_POST_FIELDS: tuple[str, ...] = ()
     _template_id: int | str | None = None
     _default_category: str | None = None
+    # (link sub-endpoint, id) -> exists? Filled lazily by _entity_exists.
+    _exists_cache: dict[tuple[str, int], bool | None] | None = None
+    _skipped_rows: list[SkippedRow] | None = None
+    # Endpoint holding the template a new entry is created from, so its extra
+    # fields can be checked up front; None disables the check.
+    _TEMPLATE_ENDPOINT: str | None = None
+    _template_defs_cache: dict[str, dict[str, tuple[str, dict]]] | None = None
 
     # Cell-value prefix that renames an extra field: "$rename$New Name".
     _RENAME_PREFIX: str = "$rename$"
@@ -586,6 +619,250 @@ class BaseImporter(ABC):
                 logger.info("Setting %s to %s", field, merged)
 
         return payload
+
+    # endregion
+
+    # region --- Row validation ---
+
+    def _entity_exists(self, link_endpoint: str, entity_id: int) -> bool | None:
+        """Ask eLabFTW whether a link target exists; ``None`` when it can't tell.
+
+        Only a 404 counts as "missing". Any other failure (auth, network, 5xx)
+        returns ``None`` so a transient problem never gets a row skipped.
+        """
+        if self._exists_cache is None:
+            self._exists_cache = {}
+        key = (link_endpoint, entity_id)
+        if key in self._exists_cache:
+            return self._exists_cache[key]
+
+        endpoint_name, label = _LINK_TARGETS[link_endpoint]
+        result: bool | None = None
+        try:
+            status = get_fixed(endpoint_name).get(endpoint_id=entity_id).status_code
+            if status == 404:
+                result = False
+            elif status < 400:
+                result = True
+            else:
+                logger.warning(
+                    "Could not verify %s %s: HTTP %s.", label.lower(), entity_id, status
+                )
+        except Exception as exc:
+            logger.warning("Could not verify %s %s: %s", label.lower(), entity_id, exc)
+
+        self._exists_cache[key] = result
+        return result
+
+    def _is_marker(self, value: Any) -> bool:
+        """True for update-mode marker cells ($delete_V, $delete_F, $rename$...)."""
+        return isinstance(value, str) and (
+            value in {"$delete_V", "$delete_F"} or value.startswith(self._RENAME_PREFIX)
+        )
+
+    def _checkable_cells(self, row: pd.Series) -> Iterable[tuple[str, str]]:
+        """Yield ``(column, text)`` for filled-in cells that hold real values."""
+        for col, raw in row.items():
+            if not isinstance(col, str) or raw is None or self._is_marker(raw):
+                continue
+            if isinstance(raw, float) and pd.isna(raw):
+                continue
+            text = str(raw).replace("\u00a0", " ").strip()
+            if text:
+                yield col, text
+
+    @staticmethod
+    def _field_defs_from_json(
+        entity_json: dict[str, Any],
+    ) -> dict[str, tuple[str, dict]]:
+        """Map canonical extra-field titles to ``(title, definition)``."""
+        metadata = entity_json.get("metadata") or {}
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata)
+            except Exception:
+                return {}
+        fields = metadata.get("extra_fields") if isinstance(metadata, dict) else None
+        defs: dict[str, tuple[str, dict]] = {}
+        if isinstance(fields, dict):
+            for title, definition in fields.items():
+                if isinstance(definition, dict):
+                    defs.setdefault(canonicalize(title), (title, definition))
+        return defs
+
+    def _field_defs_for(
+        self, entity_id: str | None, template: int | str | None
+    ) -> dict[str, tuple[str, dict]]:
+        """Extra-field definitions the row will be matched against.
+
+        An existing entry (update mode) brings its own; a new entry gets the
+        ones of the template it is created from. Empty when they can't be read,
+        which switches the extra-field checks off rather than guessing.
+        """
+        if entity_id is not None:
+            return self._field_defs_from_json(self.get_existing_json(str(entity_id)))
+
+        template_id = self.normalize_id(template)
+        template_id = template_id or self.normalize_id(self._template_id)
+        if template_id is None or self._TEMPLATE_ENDPOINT is None:
+            return {}
+
+        if self._template_defs_cache is None:
+            self._template_defs_cache = {}
+        if template_id not in self._template_defs_cache:
+            defs: dict[str, tuple[str, dict]] = {}
+            try:
+                endpoint = get_fixed(self._TEMPLATE_ENDPOINT)
+                response = endpoint.get(endpoint_id=template_id)
+                response.raise_for_status()
+                payload = response.json()
+                if isinstance(payload, dict):
+                    defs = self._field_defs_from_json(payload)
+            except Exception as exc:
+                logger.warning(
+                    "Could not read template %s; skipping field checks: %s",
+                    template_id,
+                    exc,
+                )
+            self._template_defs_cache[template_id] = defs
+        return self._template_defs_cache[template_id]
+
+    def _check_link_columns(self, row: pd.Series) -> list[RowIssue]:
+        """Flag link-column values that are not numeric IDs or do not exist."""
+        issues: list[RowIssue] = []
+        if not self._SUPPORTS_LINKS:
+            return issues
+        for col, text in self._checkable_cells(row):
+            target = self._LINK_COLUMN_MAP.get(link_key(col))
+            if target is None:
+                continue
+            label = _LINK_TARGETS[target][1]
+            for chunk in self._split_multi(text):
+                link_id = self._parse_integer_id(chunk)
+                if link_id is None:
+                    issues.append(
+                        RowIssue(col, chunk, f"{chunk!r} is not a valid {label} ID")
+                    )
+                elif self._entity_exists(target, link_id) is False:
+                    issues.append(
+                        RowIssue(col, chunk, f"{label} {link_id} does not exist")
+                    )
+        return issues
+
+    def _check_category(self, row: pd.Series) -> list[RowIssue]:
+        """Flag a category cell that is not a number (it would abort the import)."""
+        col = self.resolve_category_col()
+        if col is None:
+            return []
+        for cell_col, text in self._checkable_cells(row):
+            # pandas reads a column with blanks as floats, so "12" arrives as "12.0".
+            if cell_col == col and self._parse_integer_id(text) is None:
+                return [RowIssue(col, text, f"{text!r} is not a valid category ID")]
+        return []
+
+    def _check_extra_fields(
+        self, row: pd.Series, defs: dict[str, tuple[str, dict]]
+    ) -> list[RowIssue]:
+        """Flag values that do not fit the template field they are matched to.
+
+        Covers link-type fields (numeric id of an existing entry) and select
+        fields (value must be one of the options). Other types are not checked.
+        """
+        issues: list[RowIssue] = []
+        for col, text in self._checkable_cells(row):
+            if self._LINK_COLUMN_MAP.get(link_key(col)) is not None:
+                continue
+            found = defs.get(canonicalize(col))
+            if found is None:
+                continue
+            title, defn = found
+            ftype = defn.get("type")
+
+            if ftype in {"items", "experiments"} and self._SUPPORTS_LINKS:
+                target = "items_links" if ftype == "items" else "experiments_links"
+                label = _LINK_TARGETS[target][1]
+                link_id = self._parse_integer_id(text)
+                if link_id is None:
+                    issues.append(
+                        RowIssue(
+                            col, text, f"{text!r} is not a valid {label} ID ({title})"
+                        )
+                    )
+                elif self._entity_exists(target, link_id) is False:
+                    issues.append(
+                        RowIssue(
+                            col, text, f"{label} {link_id} does not exist ({title})"
+                        )
+                    )
+
+            elif ftype == "select":
+                options = [str(o).strip() for o in defn.get("options") or []]
+                if not options:
+                    continue
+                known = set(options) | {o.lower() for o in options}
+                values = self._split_multi(text)
+                bad = [v for v in values if v not in known and v.lower() not in known]
+                multi = bool(defn.get("allow_multi_values"))
+                if bad and (multi or len(bad) == len(values)):
+                    issues.append(
+                        RowIssue(
+                            col,
+                            ", ".join(bad),
+                            f"{', '.join(repr(v) for v in bad)} is not an option of "
+                            f"{title!r} (options: {', '.join(options)})",
+                        )
+                    )
+        return issues
+
+    def validate_row(
+        self,
+        row: pd.Series,
+        entity_id: str | None = None,
+        template: int | str | None = None,
+    ) -> list[RowIssue]:
+        """Return every problem found in a row (empty list = row is fine).
+
+        ``entity_id`` is the entry being updated; without it the row is checked
+        against the fields of the template a new entry is created from.
+        """
+        issues = self._check_link_columns(row)
+        issues += self._check_category(row)
+        defs = self._field_defs_for(entity_id, template)
+        if defs:
+            issues += self._check_extra_fields(row, defs)
+        return issues
+
+    @property
+    def skipped_rows(self) -> list[SkippedRow]:
+        """Rows left out because validate_row found problems, in CSV order."""
+        if self._skipped_rows is None:
+            self._skipped_rows = []
+        return self._skipped_rows
+
+    def _should_skip_row(
+        self,
+        row_index: Any,
+        row: pd.Series,
+        entity_id: str | None = None,
+        template: int | str | None = None,
+    ) -> bool:
+        """Validate a row; on problems log and record it and return True.
+
+        ``row_index`` is the 0-based DataFrame index; rows are reported as the
+        Nth data row (header excluded), matching the other row warnings.
+        """
+        issues = self.validate_row(row, entity_id=entity_id, template=template)
+        if not issues:
+            return False
+        reasons = tuple(issue.reason for issue in issues)
+        row_number = int(row_index) + 1
+        logger.warning("Skipping row %d: %s", row_number, "; ".join(reasons))
+        self.skipped_rows.append(SkippedRow(row_number, reasons))
+        return True
+
+    # endregion
+
+    # region --- Row field extraction ---
 
     def _extract_known_post_fields(
         self, row: pd.Series, template: int | str | None

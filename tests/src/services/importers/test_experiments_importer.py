@@ -10,7 +10,6 @@ import pytest
 from src.services.importers import experiments_importer as exp_module
 from tests.conftest import FakeEndpoint, FakeResponse, write_csv
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -2317,3 +2316,117 @@ def test_parse_link_ids_tolerates_quoted_cells() -> None:
     assert parse("'351;352'") == [351, 352]
     assert parse('"351"') == [351]
     assert parse('"abc"') == []
+
+
+# ---------------------------------------------------------------------------
+# Rows with unusable link values are skipped
+# ---------------------------------------------------------------------------
+
+
+def _known_links(monkeypatch: pytest.MonkeyPatch, known: set[tuple[str, int]]) -> None:
+    """Make the link-target lookup know only the given (endpoint, id) pairs."""
+
+    def fake_get_fixed(name: str) -> FakeEndpoint:
+        def get(endpoint_id: int, **_: Any) -> FakeResponse:
+            return FakeResponse(status_code=200 if (name, endpoint_id) in known else 404)
+
+        return FakeEndpoint(get=get)
+
+    monkeypatch.setattr("src.services.importers.base_importer.get_fixed", fake_get_fixed)
+
+
+def test_create_skips_row_with_missing_link_target(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _known_links(monkeypatch, {("experiments", 5)})
+    posts: list[Any] = []
+
+    def fake_post(**kwargs: Any) -> FakeResponse:
+        posts.append(kwargs)
+        return FakeResponse(headers={"Location": "http://x/experiments/99"})
+
+    importer = _make_importer(
+        monkeypatch,
+        tmp_path,
+        ["title", "experiments links"],
+        [["good", "5"], ["bad", "404"], ["also good", ""]],
+        post=fake_post,
+    )
+    monkeypatch.setattr(importer, "post_extra_fields_from_row", lambda *a, **kw: None)
+
+    ids = importer.create_all_from_csv()
+
+    assert len(ids) == 2
+    assert len(posts) == 2
+    assert importer.skipped_count == 1
+    assert [(s.row_number, s.reasons) for s in importer.skipped_rows] == [
+        (2, ("Experiment 404 does not exist",))
+    ]
+
+
+def test_update_skips_row_with_missing_link_target(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _known_links(monkeypatch, {("resources", 7)})
+    patched: list[str] = []
+
+    def fake_patch(**kwargs: Any) -> FakeResponse:
+        patched.append(str(kwargs.get("endpoint_id")))
+        return FakeResponse()
+
+    importer = _make_importer(
+        monkeypatch,
+        tmp_path,
+        ["Experiment ID", "resources links"],
+        [["10", "7"], ["11", "8, abc"]],
+        patch=fake_patch,
+        update_existing=True,
+    )
+    monkeypatch.setattr(importer, "post_extra_fields_from_row", lambda *a, **kw: None)
+
+    ids = importer.create_all_from_csv()
+
+    assert ids == ["10"]
+    assert "11" not in patched
+    assert importer.skipped_count == 1
+    assert importer.skipped_rows[0].row_number == 2
+    assert importer.skipped_rows[0].reasons == (
+        "Resource 8 does not exist",
+        "'abc' is not a valid Resource ID",
+    )
+
+
+def test_create_skips_row_with_invalid_select_value(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    template_json = {
+        "metadata": json.dumps(
+            {"extra_fields": {"Color": {"type": "select", "options": ["Red", "Green"]}}}
+        )
+    }
+    looked_up: list[tuple[str, Any]] = []
+
+    def fake_get_fixed(name: str) -> FakeEndpoint:
+        def get(endpoint_id: Any, **_: Any) -> FakeResponse:
+            looked_up.append((name, endpoint_id))
+            return FakeResponse(json_data=template_json)
+
+        return FakeEndpoint(get=get)
+
+    monkeypatch.setattr("src.services.importers.base_importer.get_fixed", fake_get_fixed)
+    importer = _make_importer(
+        monkeypatch,
+        tmp_path,
+        ["title", "Color"],
+        [["a", "Red"], ["b", "Blue"], ["c", "green"]],
+        template_id=5,
+    )
+    monkeypatch.setattr(importer, "post_extra_fields_from_row", lambda *a, **kw: None)
+
+    ids = importer.create_all_from_csv()
+
+    assert len(ids) == 2
+    assert importer.skipped_count == 1
+    assert importer.skipped_rows[0].row_number == 2
+    assert "'Blue' is not an option of 'Color'" in importer.skipped_rows[0].reasons[0]
+    assert looked_up == [("experiments_templates", "5")]

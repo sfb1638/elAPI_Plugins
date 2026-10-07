@@ -1,15 +1,16 @@
+import io
+import json
 import logging
 import os
-import io
 import sys
 import tempfile
-import json
 import threading
 import time
 import webbrowser
-import pandas as pd
 from pathlib import Path
+from typing import Any
 
+import pandas as pd
 import yaml
 from flask import Flask, flash, redirect, render_template, request, send_file, url_for
 from werkzeug.serving import make_server
@@ -66,6 +67,21 @@ if getattr(sys, "frozen", False):
         pass
 
 
+MAX_SKIPPED_ROWS_SHOWN = 10
+
+
+def _format_skipped_rows(skipped_rows: list[Any]) -> str:
+    """Build the warning text listing rows the importer left out and why."""
+    noun = "row" if len(skipped_rows) == 1 else "rows"
+    lines = [f"Skipped {len(skipped_rows)} {noun} with invalid values:"]
+    for skipped in skipped_rows[:MAX_SKIPPED_ROWS_SHOWN]:
+        lines.append(f"Row {skipped.row_number}: {'; '.join(skipped.reasons)}")
+    hidden = len(skipped_rows) - MAX_SKIPPED_ROWS_SHOWN
+    if hidden > 0:
+        lines.append(f"...and {hidden} more (see app.log).")
+    return "\n".join(lines)
+
+
 def resource_path(rel_path: str) -> str:
     """Return path to a bundled resource (handles PyInstaller _MEIPASS)."""
     base_path = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
@@ -75,7 +91,7 @@ def resource_path(rel_path: str) -> str:
 def _elapi_config_ok() -> bool:
     """Check whether elapi config file has host and api_token set."""
     try:
-        with open(ELAPI_CONFIG_PATH, "r") as fh:
+        with open(ELAPI_CONFIG_PATH) as fh:
             cfg = yaml.safe_load(fh)
         if not isinstance(cfg, dict):
             return False
@@ -87,7 +103,7 @@ def _elapi_config_ok() -> bool:
 def _read_elapi_config() -> dict:
     """Return current host/api_token values from the config file."""
     try:
-        with open(ELAPI_CONFIG_PATH, "r") as fh:
+        with open(ELAPI_CONFIG_PATH) as fh:
             cfg = yaml.safe_load(fh)
         if isinstance(cfg, dict):
             return {"host": cfg.get("host", ""), "api_token": cfg.get("api_token", "")}
@@ -108,7 +124,6 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_DIR
 
 server = None
-
 
 def _build_category_options(
     categories: list[dict],
@@ -161,7 +176,7 @@ def setup() -> str | WerkzeugResponse:
         # Read existing config to preserve extra fields, or use defaults
         existing: dict = {}
         try:
-            with open(ELAPI_CONFIG_PATH, "r") as fh:
+            with open(ELAPI_CONFIG_PATH) as fh:
                 loaded = yaml.safe_load(fh)
             if isinstance(loaded, dict):
                 existing = loaded
@@ -431,11 +446,15 @@ def index() -> str | WerkzeugResponse:
                     skipped = getattr(importer, "skipped_count", 0)
                     flash(
                         f"Updated {count} existing {import_target} from {source}"
-                        + (f"; skipped {skipped} invalid IDs" if skipped else ""),
+                        + (f"; skipped {skipped}" if skipped else ""),
                         "success",
                     )
                 else:
                     flash(f"Imported {count} {import_target} from {source}", "success")
+
+                skipped_rows = getattr(importer, "skipped_rows", [])
+                if skipped_rows:
+                    flash(_format_skipped_rows(skipped_rows), "warning")
 
             except Exception as e:
                 flash(f"Import failed: {e}", "error")

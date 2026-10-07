@@ -35,6 +35,8 @@ class ResourcesImporter(BaseImporter):
     """Importer for the ElabFTW ``resources`` endpoint."""
 
     _KNOWN_POST_FIELDS: set[str] = set(CONFIG["known_post_fields"])
+    # Template a new entry is created from; read up front to check extra fields.
+    _TEMPLATE_ENDPOINT = "categories"
     # Set in __init__ when update-existing is enabled; declared here so the
     # attribute always exists.
     _resource_id_col: str | None = None
@@ -241,7 +243,10 @@ class ResourcesImporter(BaseImporter):
 
     def _import_new_resources(self, template: int | str | None) -> list[str]:
         ids: list[str] = []
-        for _, row in self.basic_df.iterrows():
+        for idx, row in self.basic_df.iterrows():
+            if self._should_skip_row(idx, row, template=template):
+                self._skipped_resources_counter += 1
+                continue
             ids.append(self.create_new(row=row, template=template))
         return ids
 
@@ -264,6 +269,10 @@ class ResourcesImporter(BaseImporter):
             )
 
             if not resource_id:
+                self._skipped_resources_counter += 1
+                continue
+
+            if self._should_skip_row(idx, row, entity_id=resource_id):
                 self._skipped_resources_counter += 1
                 continue
             category = self.get_category_id(row) or self._default_category

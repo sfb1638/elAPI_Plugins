@@ -181,7 +181,8 @@ different eLabFTW mechanisms is used — identical for `create_new` and
 - Note `canonicalize()` alone keeps `_`, so never match link columns with it
   directly — that was a real bug (underscore headers silently became extra fields).
 - Values are parsed by `_parse_link_ids()` (comma/semicolon separated integers);
-  non-numeric values log a warning and create no links.
+  non-numeric tokens are dropped here, but `validate_row` runs first and skips
+  the whole row for them (see "Row validation" below).
 - Link creation **requires** an `{"action": "create"}` JSON body:
   `POST /{entity}/{id}/{..._links}/{subid}` with the subid in the path. Omitting
   the body makes eLabFTW return **HTTP 500** and create nothing (apidoc v2). This
@@ -222,6 +223,43 @@ Notes:
   cell have no effect — the title can't be cleared/renamed this way.
 - Rename **collisions** (target name already exists) are skipped with a warning;
   renaming a field the entity doesn't have is a no-op.
+
+## Row validation (importers)
+
+Before a row is imported, `BaseImporter.validate_row(row, entity_id, template)`
+checks it against eLabFTW; any problem makes `_should_skip_row` log
+`Skipping row N: ...`, record a `SkippedRow` in `importer.skipped_rows`, and the
+importer's loop `continue`s (incrementing its `skipped_count`). It is called in
+both `_import_new_*` (with `template=`) and `_import_update_existing` (with
+`entity_id=`, after the entity-id column is parsed) of the experiments and
+resources importers. `TemplatesImporter` is **not** validated.
+
+| Check | Rule |
+|-------|------|
+| Link columns | each value is a numeric id and the entry exists (`_entity_exists`) |
+| Extra fields of type *items*/*experiments* | same, via the field's definition |
+| Extra fields of type *select* | value in `options` (case-insensitive); multi: every value, single: at least one |
+| Category column | numeric (existence is **not** checked) |
+
+- Field definitions come from the entry's own JSON in update mode, or from the
+  template a new entry is created from (`_TEMPLATE_ENDPOINT`: `experiments_templates`
+  for experiments, `categories` i.e. `items_types` for resources), fetched once
+  and cached. No template -> no field checks.
+- `_entity_exists` caches per `(link endpoint, id)` and treats **only HTTP 404**
+  as "missing"; any other failure returns `None` and logs, so a flaky API never
+  skips good rows.
+- Update markers (`$delete_V`, `$delete_F`, `$rename$...`) are exempt
+  (`_is_marker`) — they are legitimate cell values in any column.
+- `RowIssue` = one bad cell; `SkippedRow(row_number, reasons)` = one skipped row.
+  Row numbers are the Nth data row (header excluded), like `_parse_entity_id`.
+- The GUI (`gui/gui.py::_format_skipped_rows`) flashes the list as a `warning`
+  after the import, capped at `MAX_SKIPPED_ROWS_SHOWN`; the rest is in `app.log`.
+- **Why category existence isn't checked:** the endpoint depends on the eLabFTW
+  version. In current API v2, experiment categories live at
+  `/teams/{id}/experiments_categories/{subid}` and resource categories at
+  `/teams/{id}/resources_categories/{subid}` (team-scoped), while top-level
+  `/items_types` are resource *templates*. A wrong endpoint would 404 and skip
+  every row, so confirm the target instance before adding such a check.
 
 ## Conventions
 

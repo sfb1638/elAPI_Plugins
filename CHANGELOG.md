@@ -5,6 +5,30 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Row validation on import.** Before a row is imported its values are checked
+  against eLabFTW, and a row with an unusable value is skipped as a whole and
+  reported. The check covers link columns, link-type extra fields (the entry
+  must exist), select extra fields (the value must be one of the options) and
+  the category column (must be numeric). After the import the GUI lists each
+  skipped row with the reason, and the log keeps the full list. Only a "not
+  found" answer counts as missing, so a network or permission error never skips
+  a row. Update markers (`$delete_V`, `$delete_F`, `$rename$`) are exempt.
+
+### Changed
+
+- A select value that is not one of the field's options used to be dropped
+  quietly while the rest of the row was imported; the row is now skipped.
+- A non-numeric category used to abort the whole import; it now skips only that
+  row.
+- A link-column value that is not a numeric ID used to be ignored with a log
+  warning; the row is now skipped.
+- In update mode the success message reads "skipped N" instead of
+  "skipped N invalid IDs", as rows can now be skipped for other reasons.
+
 ## [1.3.0b1] — 2026-08-28
 
 Beta release. The two new capabilities below are only lightly tested against a

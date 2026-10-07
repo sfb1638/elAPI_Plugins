@@ -380,3 +380,66 @@ def test_shutdown(monkeypatch: pytest.MonkeyPatch) -> None:
     client = gui.app.test_client()
     resp = client.post("/shutdown")
     assert resp.status_code == 200
+
+
+def _skipped(n: int) -> list[Any]:
+    from src.services.importers.base_importer import SkippedRow
+
+    return [
+        SkippedRow(i, (f"Experiment {i}00 does not exist",)) for i in range(1, n + 1)
+    ]
+
+
+def test_format_skipped_rows_lists_rows_and_reasons() -> None:
+    text = gui._format_skipped_rows(_skipped(1))
+    assert text == (
+        "Skipped 1 row with invalid values:\nRow 1: Experiment 100 does not exist"
+    )
+
+
+def test_format_skipped_rows_caps_the_list() -> None:
+    text = gui._format_skipped_rows(_skipped(13))
+    lines = text.splitlines()
+    assert lines[0] == "Skipped 13 rows with invalid values:"
+    assert len(lines) == 1 + gui.MAX_SKIPPED_ROWS_SHOWN + 1
+    assert lines[-1] == "...and 3 more (see app.log)."
+
+
+def test_import_flashes_warning_for_skipped_rows(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        gui.endpoints,
+        "get_fixed",
+        lambda name: FakeEndpoint(get=lambda **kw: FakeResponse(json_data={"data": []})),
+    )
+    monkeypatch.setattr(gui, "paged_fetch", lambda *args, **kwargs: [])
+
+    class DummyImporter:
+        skipped_rows = _skipped(2)
+
+        def create_all_from_csv(self) -> list[str]:
+            return ["1"]
+
+    monkeypatch.setattr(
+        gui.ImporterFactory, "get_importer", lambda *a, **kw: DummyImporter()
+    )
+    csv_path = write_csv(tmp_path / "imp.csv", ["title"], [["t"]])
+
+    gui.app.testing = True
+    client = gui.app.test_client()
+    client.post(
+        "/",
+        data={
+            "export_type": "imports",
+            "category": "1",
+            "import_path": str(csv_path),
+            "import_target": "experiments",
+        },
+    )
+
+    with client.session_transaction() as sess:
+        flashes = dict((cat, msg) for cat, msg in sess["_flashes"])
+    assert flashes["success"].startswith("Imported 1 experiments")
+    assert flashes["warning"].startswith("Skipped 2 rows with invalid values:")
+    assert "Row 2: Experiment 200 does not exist" in flashes["warning"]

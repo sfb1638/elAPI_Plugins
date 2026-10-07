@@ -248,3 +248,39 @@ def test_coerce_select_field() -> None:
     defn = {"type": "select", "allow_multi_values": True, "options": ["A", "B"]}
     coerced = res_module.ResourcesImporter._coerce_for_field(defn, "a, B")
     assert coerced == ["A", "B"]
+
+
+def test_create_skips_row_with_missing_link_target(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def fake_lookup(name: str) -> FakeEndpoint:
+        return FakeEndpoint(get=lambda **kw: FakeResponse(status_code=404))
+
+    monkeypatch.setattr("src.services.importers.base_importer.get_fixed", fake_lookup)
+    posts: list[Any] = []
+
+    def fake_post(**kwargs: Any) -> FakeResponse:
+        posts.append(kwargs)
+        return FakeResponse(headers={"Location": "http://x/items/1"})
+
+    monkeypatch.setattr(
+        res_module,
+        "get_fixed",
+        lambda name: FakeEndpoint(
+            post=fake_post, patch=FakeResponse(), get=FakeResponse(json_data={})
+        ),
+    )
+    csv_path = write_csv(
+        tmp_path / "res.csv",
+        ["title", "resources links"],
+        [["ok", ""], ["bad", "123"]],
+    )
+    importer = res_module.ResourcesImporter(csv_path)
+    monkeypatch.setattr(importer, "post_extra_fields_from_row", lambda *a, **kw: None)
+
+    ids = importer.create_all_from_csv()
+
+    assert len(ids) == 1
+    assert len(posts) == 1
+    assert importer.skipped_count == 1
+    assert importer.skipped_rows[0].reasons == ("Resource 123 does not exist",)
