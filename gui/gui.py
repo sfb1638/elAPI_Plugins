@@ -125,6 +125,23 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_DIR
 
 server = None
 
+# The page asks for /shutdown when it unloads. A reload fires that too, so the
+# stop is delayed and cancelled by the next request (the reloaded page).
+SHUTDOWN_DELAY_SECONDS = 5.0
+_shutdown_timer: threading.Timer | None = None
+_shutdown_lock = threading.Lock()
+
+@app.before_request
+def _cancel_pending_shutdown() -> None:
+    """Any request other than /shutdown means the page is still in use."""
+    global _shutdown_timer
+    if request.endpoint != "shutdown":
+        with _shutdown_lock:
+            if _shutdown_timer is not None:
+                _shutdown_timer.cancel()
+                _shutdown_timer = None
+
+
 def _build_category_options(
     categories: list[dict],
     *,
@@ -476,9 +493,15 @@ def index() -> str | WerkzeugResponse:
 
 @app.route("/shutdown", methods=["POST"])
 def shutdown() -> tuple[str, int]:
-    global server
+    global _shutdown_timer
     if server:
-        threading.Thread(target=server.shutdown).start()
+        stop = server.shutdown
+        with _shutdown_lock:
+            if _shutdown_timer is not None:
+                _shutdown_timer.cancel()
+            _shutdown_timer = threading.Timer(SHUTDOWN_DELAY_SECONDS, stop)
+            _shutdown_timer.daemon = True
+            _shutdown_timer.start()
     return "Shutting down", 200
 
 

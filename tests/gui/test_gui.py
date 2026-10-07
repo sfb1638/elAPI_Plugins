@@ -443,3 +443,30 @@ def test_import_flashes_warning_for_skipped_rows(
     assert flashes["success"].startswith("Imported 1 experiments")
     assert flashes["warning"].startswith("Skipped 2 rows with invalid values:")
     assert "Row 2: Experiment 200 does not exist" in flashes["warning"]
+
+
+def test_shutdown_is_delayed_and_cancelled_by_next_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class DummyServer:
+        stopped = False
+
+        def shutdown(self) -> None:
+            self.stopped = True
+
+    dummy = DummyServer()
+    monkeypatch.setattr(gui, "server", dummy)
+    monkeypatch.setattr(gui, "SHUTDOWN_DELAY_SECONDS", 0.2)
+    gui.app.testing = True
+    client = gui.app.test_client()
+
+    client.post("/shutdown")  # page unloading ...
+    client.get("/setup")  # ... and the reloaded page arriving
+    import time
+
+    time.sleep(0.4)
+    assert dummy.stopped is False
+
+    client.post("/shutdown")  # real close: nothing follows
+    time.sleep(0.4)
+    assert dummy.stopped is True
