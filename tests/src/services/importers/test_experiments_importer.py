@@ -2456,3 +2456,14 @@ def test_create_mode_failed_row_does_not_abort_import(
     assert "boom" in importer.skipped_rows[0].reasons[0]
 
 
+def test_parse_entity_id_rejects_fractional_ids(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    importer = _make_importer(
+        monkeypatch, tmp_path, ["experiment id", "title"], [["12.7", "t"]],
+        update_existing=True,
+    )
+    row = importer.basic_df.iloc[0]
+    assert importer._parse_entity_id(importer._experiment_id_col, row, 0) is None
+    whole = pd.Series({"experiment id": "12.0", "title": "t"})
+    assert importer._parse_entity_id(importer._experiment_id_col, whole, 0) == "12"

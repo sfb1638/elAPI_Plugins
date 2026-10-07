@@ -287,8 +287,10 @@ class BaseImporter(ABC):
             )
             return None
 
-        eid_str = str(eid).split(".")[0].strip()
-        if not eid_str.isdigit():
+        # "12.0" (float-parsed CSV cell) is fine; "12.7" must not become 12.
+        parsed_id = self._parse_integer_id(eid)
+        eid_str = str(parsed_id) if parsed_id is not None else ""
+        if not eid_str:
             logger.warning(
                 "Skipping %s: invalid %s ID %r while update-existing is enabled.",
                 label,
