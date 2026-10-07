@@ -28,7 +28,7 @@ class CsvTools:
 
     @staticmethod
     def detect_delimiter(path: Path | str, encoding: str) -> str:
-        with open(path, encoding=encoding, errors="ignore") as f:
+        with open(path, encoding=encoding, errors="replace") as f:
             sample = f.read(8192)  # larger sample helps sniffing
         sample = CsvTools._normalize_text(sample)
 
@@ -53,12 +53,30 @@ class CsvTools:
             return delimiter
 
     @staticmethod
-    def csv_to_df(csv_path: Path | str) -> pd.DataFrame:
-        enc = CsvTools.detect_file_encoding(path=csv_path)
-        delimiter = CsvTools.detect_delimiter(path=csv_path, encoding=enc)
+    def _decode_file(path: Path | str) -> tuple[str, str]:
+        """Return ``(text, encoding)`` for the whole file.
 
-        with open(csv_path, encoding=enc, errors="ignore") as f:
-            raw = f.read()
+        UTF-8 is tried on the full content first: sampling only the start of a
+        file can look like ASCII and miss non-ASCII characters further down.
+        Only when that fails is the encoding guessed, from the full content.
+        """
+        with open(path, "rb") as f:
+            data = f.read()
+        try:
+            return data.decode("utf-8-sig"), "utf-8-sig"
+        except UnicodeDecodeError:
+            pass
+        enc = chardet.detect(data).get("encoding") or "cp1252"
+        # Never drop characters silently; replacement marks show up in the data.
+        text = data.decode(enc, errors="replace")
+        if "\ufffd" in text:
+            logger.warning("%s: some characters could not be decoded as %s.", path, enc)
+        return text, enc
+
+    @staticmethod
+    def csv_to_df(csv_path: Path | str) -> pd.DataFrame:
+        raw, enc = CsvTools._decode_file(csv_path)
+        delimiter = CsvTools.detect_delimiter(path=csv_path, encoding=enc)
         raw = CsvTools._normalize_text(raw)
 
         df = pd.read_csv(
