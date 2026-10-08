@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 from src.services.importers.base_importer import BaseImporter
+from src.utils.common import canonicalize
 from tests.conftest import FakeEndpoint, FakeResponse
 
 
@@ -379,3 +380,11 @@ def test_validate_row_flags_non_numeric_category() -> None:
 
 
 # endregion
+
+
+@pytest.mark.parametrize("header", ["Category ID", "category_id", "Category-ID"])
+def test_category_column_is_recognised_and_not_an_extra_field(header: str) -> None:
+    imp = DummyImporter(pd.DataFrame({"title": ["x"], header: [5]}))
+
+    assert imp.resolve_category_col() == header
+    assert canonicalize(header) in imp._category_known_columns()

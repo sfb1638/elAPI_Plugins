@@ -507,7 +507,7 @@ class BaseImporter(ABC):
     def resolve_category_col(self) -> str | None:
         """Try to identify the column storing category ids from the DataFrame."""
         for c in self.basic_df.columns:
-            canon = canonicalize(c)
+            canon = canonicalize(c).replace("_", "")
             if (
                 canon.startswith("categoryid")
                 or "categoryid" in canon
@@ -516,6 +516,11 @@ class BaseImporter(ABC):
             ):
                 return c
         return None
+
+    def _category_known_columns(self) -> set[str]:
+        """Canonical name of the category column, so it is not sent as an extra."""
+        col = self.resolve_category_col()
+        return {canonicalize(col)} if col else set()
 
     def get_category_id(self, row: pd.Series) -> str | None:
         """Return normalized numeric category id from row or None; raises on non-numeric."""
@@ -1649,6 +1654,7 @@ class BaseImporter(ABC):
         known |= {
             canonicalize(col) for col in self.find_permission_columns(row).values()
         }
+        known |= self._category_known_columns()
         self.post_extra_fields_from_row(entity_id, row, known_columns=known)
 
         self._increment_new_counter()

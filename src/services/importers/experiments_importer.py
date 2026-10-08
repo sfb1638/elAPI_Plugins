@@ -216,6 +216,7 @@ class ExperimentsImporter(BaseImporter):
             canonicalize_field(col)
             for col in self.find_permission_columns(row).values()
         }
+        known |= self._category_known_columns()
         self.post_extra_fields_from_row(
             experiment_id,
             row,
