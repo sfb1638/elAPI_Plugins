@@ -47,3 +47,19 @@ def test_check_for_update_handles_missing_releases() -> None:
     info = check_for_update(current_version="0.1.0")
     assert info.is_update_available is False
     assert info.latest_version == "0.1.0"
+
+
+@responses.activate
+def test_check_for_update_leaves_missing_fields_as_none() -> None:
+    responses.add(
+        responses.GET,
+        GITHUB_API_LATEST,
+        json={"tag_name": "v9.9.9", "assets": []},
+        status=200,
+    )
+
+    info = check_for_update(current_version="1.0.0")
+
+    assert info.html_url is None
+    assert info.release_notes is None
+    assert info.published_at is None

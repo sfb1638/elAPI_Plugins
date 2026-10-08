@@ -47,6 +47,11 @@ class UpdateInfo:
             }
 
 
+def _str_or_none(value: object) -> str | None:
+    """``str(value)``, but ``None`` stays ``None`` instead of becoming "None"."""
+    return str(value) if value else None
+
+
 def _strip_prefix (v: str) -> str:
     return v.lstrip("vV").strip()
 
@@ -276,9 +281,9 @@ def check_for_update (
         is_update_available=is_newer,
         download_url=asset_url or None,
         asset_name=asset_name,
-        html_url=str(payload.get("html_url") or None),
-        release_notes=str(payload.get("body") or None),
-        published_at=str(payload.get("published_at") or None),
+        html_url=_str_or_none(payload.get("html_url")),
+        release_notes=_str_or_none(payload.get("body")),
+        published_at=_str_or_none(payload.get("published_at")),
         etag=new_etag,
         )
 
