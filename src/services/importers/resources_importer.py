@@ -279,11 +279,11 @@ class ResourcesImporter(BaseImporter):
             if self._should_skip_row(idx, row, entity_id=resource_id):
                 self._skipped_resources_counter += 1
                 continue
-            category = self.get_category_id(row) or self._default_category
-
-            if category is not None:
-                self.validate_category_id(category)
             try:
+                category = self.get_category_id(row) or self._default_category
+
+                if category is not None:
+                    self.validate_category_id(category)
                 self.patch_existing(resource_id=resource_id, row=row, category=category)
                 ids.append(resource_id)
             except Exception as exc:

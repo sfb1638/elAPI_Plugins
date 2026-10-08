@@ -388,3 +388,11 @@ def test_category_column_is_recognised_and_not_an_extra_field(header: str) -> No
 
     assert imp.resolve_category_col() == header
     assert canonicalize(header) in imp._category_known_columns()
+
+
+def test_get_category_id_accepts_float_text_and_rejects_fractions() -> None:
+    imp = DummyImporter(pd.DataFrame({"Category ID": ["12.0"]}))
+
+    assert imp.get_category_id(pd.Series({"Category ID": "12.0"})) == "12"
+    with pytest.raises(ValueError):
+        imp.get_category_id(pd.Series({"Category ID": "1.5"}))

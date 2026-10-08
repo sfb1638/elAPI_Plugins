@@ -532,8 +532,11 @@ class BaseImporter(ABC):
         cid = self.normalize_id(row[col])
         if cid is None:
             return None
-        self.validate_category_id(cid)
-        return cid
+        # Same parsing as the row check: "12.0" is fine, "abc" and "1.5" are not.
+        parsed = self._parse_integer_id(cid)
+        if parsed is None:
+            raise ValueError("Category ID must be numeric.")
+        return str(parsed)
 
     def _collect_csv_extra_fields(
         self, row: pd.Series, known_columns: Iterable[str] | None = None

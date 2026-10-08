@@ -303,8 +303,8 @@ class TemplatesImporter(BaseImporter):
                 self._skipped_templates_counter += 1
                 continue
 
-            category = self.get_category_id(row) or self._default_category
             try:
+                category = self.get_category_id(row) or self._default_category
                 self.patch_existing(
                     template_row_id=template_row_id, row=row, category=category
                 )

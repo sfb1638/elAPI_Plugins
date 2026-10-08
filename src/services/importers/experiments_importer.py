@@ -278,11 +278,11 @@ class ExperimentsImporter(BaseImporter):
             if self._should_skip_row(idx, row, entity_id=experiment_id):
                 self._skipped_experiments_counter += 1
                 continue
-            category = self.get_category_id(row) or self._default_category
-
-            if category is not None:
-                self.validate_category_id(category)
             try:
+                category = self.get_category_id(row) or self._default_category
+
+                if category is not None:
+                    self.validate_category_id(category)
                 self.patch_existing(
                     experiment_id=experiment_id, row=row, category=category
                 )
