@@ -49,6 +49,7 @@ class TemplatesImporter(BaseImporter):
     # Templates have neither uploads nor entity links.
     _SUPPORTS_UPLOADS = False
     _SUPPORTS_LINKS = False
+    _SUPPORTS_ENTRY_META = False
 
     _KNOWN_POST_FIELDS: set[str] = {
         "title",

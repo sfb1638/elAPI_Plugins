@@ -102,6 +102,8 @@ class BaseImporter(ABC):
     # switch these off instead of sending requests the API would reject.
     _SUPPORTS_UPLOADS: bool = True
     _SUPPORTS_LINKS: bool = True
+    # Templates carry neither a date nor a status.
+    _SUPPORTS_ENTRY_META: bool = True
 
     # Subclasses must populate these at construction time.
     _KNOWN_POST_FIELDS: tuple[str, ...] = ()
@@ -263,6 +265,37 @@ class BaseImporter(ABC):
 
         logger.warning("Unrecognized date format: %r", date_str)
         return None
+
+    def _get_status_id(self, row: pd.Series) -> str | None:
+        """Return the numeric status id from the ``status`` column, if any.
+
+        The API takes a status id; a name cannot be resolved here, so it is
+        ignored with a warning rather than sent and rejected.
+        """
+        col = self.cols_canon.get("status")
+        if not col or col not in row:
+            return None
+        raw = self.normalize_id(row[col])
+        if raw is None:
+            return None
+        parsed = self._parse_integer_id(raw)
+        if parsed is None:
+            logger.warning(
+                "Ignoring status %r: the status column needs a numeric status ID.", raw
+            )
+            return None
+        return str(parsed)
+
+    def _entry_meta_payload(self, row: pd.Series) -> dict[str, Any]:
+        """Date and status of a row, as PATCH fields."""
+        if not self._SUPPORTS_ENTRY_META:
+            return {}
+        payload: dict[str, Any] = {}
+        if date := self._normalize_date(row):
+            payload["date"] = date
+        if (status := self._get_status_id(row)) is not None:
+            payload["status"] = status
+        return payload
 
     def _parse_entity_id(
         self,
@@ -1584,6 +1617,18 @@ class BaseImporter(ABC):
             except Exception as exc:
                 raise RuntimeError(
                     f"Failed to patch title for entry {entity_id}: "
+                    f"{getattr(patch_resp, 'status_code', '?')} "
+                    f"{getattr(patch_resp, 'text', '')}"
+                ) from exc
+
+        if meta := self._entry_meta_payload(row):
+            patch_resp = None
+            try:
+                patch_resp = self.endpoint.patch(endpoint_id=entity_id, data=meta)
+                patch_resp.raise_for_status()
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Failed to patch {', '.join(meta)} for entry {entity_id}: "
                     f"{getattr(patch_resp, 'status_code', '?')} "
                     f"{getattr(patch_resp, 'text', '')}"
                 ) from exc

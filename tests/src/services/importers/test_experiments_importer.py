@@ -2467,3 +2467,29 @@ def test_parse_entity_id_rejects_fractional_ids(
     assert importer._parse_entity_id(importer._experiment_id_col, row, 0) is None
     whole = pd.Series({"experiment id": "12.0", "title": "t"})
     assert importer._parse_entity_id(importer._experiment_id_col, whole, 0) == "12"
+
+
+def test_create_new_sets_date_and_status(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    patches: list[dict[str, Any]] = []
+
+    def patch(*args: Any, **kwargs: Any) -> FakeResponse:
+        patches.append(kwargs["data"])
+        return FakeResponse()
+
+    endpoint = FakeEndpoint(
+        get=FakeResponse(json_data={"metadata": "{}"}),
+        post=FakeResponse(201, headers={"Location": "/experiments/9"}),
+        patch=patch,
+    )
+    monkeypatch.setattr(exp_module, "get_fixed", lambda name: endpoint)
+    csv_path = write_csv(
+        tmp_path / "exp.csv", ["title", "date", "status"], [["t", "01.02.2024", 3]]
+    )
+    importer = exp_module.ExperimentsImporter(csv_path)
+
+    importer.create_all_from_csv()
+
+    assert {"date": "2024-02-01", "status": "3"} in patches
+    assert all("metadata" not in p for p in patches)

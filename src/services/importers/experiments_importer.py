@@ -167,8 +167,7 @@ class ExperimentsImporter(BaseImporter):
                     f"{existing_body}\n{new_body}" if existing_body else new_body
                 )
 
-        if date := self._normalize_date(row):
-            payload["date"] = date
+        payload.update(self._entry_meta_payload(row))
 
         # Permissions: only the lists given in the CSV are replaced.
         payload.update(self.build_permission_payload(row, existing_json))
