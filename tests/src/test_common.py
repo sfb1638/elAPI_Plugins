@@ -139,3 +139,20 @@ def test_load_config_reads_json(tmp_path: Path) -> None:
 def test_load_config_missing_file_raises() -> None:
     with pytest.raises(FileNotFoundError):
         load_config(Path("/nonexistent/config.json"))
+
+
+def test_paged_fetch_raises_when_every_window_times_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = {"n": 0}
+
+    def get_page(limit: int, offset: int) -> list[int]:
+        calls["n"] += 1
+        raise ReadTimeout()
+
+    monkeypatch.setattr(time, "sleep", lambda seconds: None)
+
+    with pytest.raises(ReadTimeout):
+        list(paged_fetch(get_page, page_size=4, max_retries=1, max_skipped_windows=2))
+
+    assert calls["n"] == 6  # 3 windows x (first try + 1 retry)

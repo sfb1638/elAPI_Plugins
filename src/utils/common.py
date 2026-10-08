@@ -97,11 +97,18 @@ def paged_fetch(
     page_size: int = 30,
     max_retries: int = 3,
     min_limit: int = 5,
+    max_skipped_windows: int = 3,
     backoff_s: Callable[[int], float] = lambda attempt: 1.5 * attempt,
     on_progress: Callable[[int, int, int], None] | None = None,
 ) -> Iterator[T]:
-    """Iterate pages with retries, adaptive limits, and optional progress callback."""
+    """Iterate pages with retries, adaptive limits, and optional progress callback.
+
+    A window that keeps timing out is skipped, but after ``max_skipped_windows``
+    in a row the last timeout is raised: the server is down, and skipping on
+    would never end.
+    """
     offset = start_offset
+    skipped_in_a_row = 0
 
     while True:
         attempt = 0
@@ -113,6 +120,9 @@ def paged_fetch(
                 break
             except Timeouts:
                 if attempt >= max_retries:
+                    skipped_in_a_row += 1
+                    if skipped_in_a_row > max_skipped_windows:
+                        raise
                     logger.warning(
                         "Timed out fetching page at offset %s after %s retries; "
                         "skipping this window — exported data may be incomplete.",
@@ -146,6 +156,7 @@ def paged_fetch(
                 continue
             break
 
+        skipped_in_a_row = 0
         if on_progress:
             on_progress(len(page), offset, current_limit)
 
