@@ -92,6 +92,8 @@ PYI_ARGS+=(--add-data "gui/templates:templates")
 PYI_ARGS+=(--add-data "${ELAPI_VERSION_FILE}:elapi")
 PYI_ARGS+=(--add-data "${ELAPI_SUPPORTED_VERSIONS_DIR}:elapi/api/_supported_versions")
 [ -d "config" ] && PYI_ARGS+=(--add-data "config:config")
+# The updater reads the app version from pyproject.toml (no package metadata is bundled).
+PYI_ARGS+=(--add-data "pyproject.toml:.")
 
 # Build the .app
 python -m PyInstaller "${PYI_ARGS[@]}" "$ENTRYPOINT"

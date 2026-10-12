@@ -151,6 +151,8 @@ $DATA_ARGS += "--add-data", "$ELAPI_SUPPORTED_VERSIONS_DIR;elapi/api/_supported_
 if (Test-Path "config") {
     $DATA_ARGS += "--add-data", "config;config"
 }
+# The updater reads the app version from pyproject.toml (no package metadata is bundled).
+$DATA_ARGS += "--add-data", "pyproject.toml;."
 
 # Optional icon (the app icon lives under gui/assets)
 $ICON_PATH = "gui/assets/app.ico"

@@ -5,7 +5,7 @@ import logging.config
 import os
 
 from src.utils.common import load_config
-from src.utils.paths import BASE_DIR, LOGGING_CONFIG
+from src.utils.paths import LOGGING_CONFIG, log_dir
 
 
 def _coerce_level(level: str | int | None) -> str | int | None:
@@ -40,7 +40,7 @@ def setup_logging(level: str | int | None = None, force: bool = False) -> None:
     for handler in logging_config.get("handlers", {}).values():
         filename = handler.get("filename")
         if filename:
-            log_path = BASE_DIR / "logs" / filename
+            log_path = log_dir() / filename
             log_path.parent.mkdir(parents=True, exist_ok=True)
 
             handler["filename"] = str(log_path)

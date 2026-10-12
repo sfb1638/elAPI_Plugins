@@ -100,6 +100,8 @@ DATA_ARGS=(--add-data "gui/templates:templates")
 DATA_ARGS+=(--add-data "${ELAPI_VERSION_FILE}:elapi")
 DATA_ARGS+=(--add-data "${ELAPI_SUPPORTED_VERSIONS_DIR}:elapi/api/_supported_versions")
 [ -d "config" ] && DATA_ARGS+=(--add-data "config:config")
+# The updater reads the app version from pyproject.toml (no package metadata is bundled).
+DATA_ARGS+=(--add-data "pyproject.toml:.")
 
 # Build a single self-contained executable. "--paths ." puts the project root on
 # the analysis path so the `src.*` packages imported by gui.py are found.
