@@ -462,11 +462,23 @@ def index() -> str | WerkzeugResponse:
                 source = os.path.join(app.config["UPLOAD_FOLDER"], filename)
                 uploaded.save(source)
 
+            # Relative paths in the files_path/attachments columns resolve against
+            # this folder: the one typed into the form, else (when the CSV was
+            # given by path) the CSV's own folder. An uploaded file has no folder.
+            files_dir = (request.form.get("files_base_dir") or "").strip()
+            if files_dir and not os.path.isdir(os.path.expanduser(files_dir)):
+                flash(f"Attachments folder not found: {files_dir}", "error")
+                return redirect(url_for("index"))
+            files_base_dir = files_dir or (
+                os.path.dirname(source) if import_path else None
+            )
+
             try:
                 if import_target == "resources":
                     importer = ImporterFactory.get_importer(
                         "resources",
                         csv_path=source,
+                        files_base_dir=files_base_dir,
                         template_id=cid if not update_existing else None,
                         category_id=cid if update_existing else None,
                         update_existing=update_existing,
@@ -479,6 +491,7 @@ def index() -> str | WerkzeugResponse:
                     importer = ImporterFactory.get_importer(
                         "experiments",
                         csv_path=source,
+                        files_base_dir=files_base_dir,
                         template_id=exp_template_id if not update_existing else None,
                         update_existing=update_existing,
                     )

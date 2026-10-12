@@ -494,3 +494,83 @@ def test_shutdown_is_delayed_and_cancelled_by_next_request(
     client.post("/shutdown")  # real close: nothing follows
     time.sleep(0.4)
     assert dummy.stopped is True
+
+
+def _capture_import_kwargs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> dict[str, Any]:
+    captured: dict[str, Any] = {}
+
+    monkeypatch.setattr(
+        gui.endpoints,
+        "get_fixed",
+        lambda name: FakeEndpoint(get=lambda **kw: FakeResponse(json_data={"data": []})),
+    )
+    monkeypatch.setattr(gui, "paged_fetch", lambda get_page, **kw: [])
+
+    class DummyImporter:
+        def create_all_from_csv(self) -> list[str]:
+            return []
+
+    def fake_get_importer(*args: Any, **kwargs: Any) -> DummyImporter:
+        captured.update(kwargs)
+        return DummyImporter()
+
+    monkeypatch.setattr(gui.ImporterFactory, "get_importer", fake_get_importer)
+    return captured
+
+
+def test_import_by_path_resolves_attachments_next_to_the_csv(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured = _capture_import_kwargs(monkeypatch)
+    csv_path = write_csv(tmp_path / "imp.csv", ["title"], [["t"]])
+
+    gui.app.testing = True
+    gui.app.test_client().post(
+        "/",
+        data={"export_type": "imports", "import_path": str(csv_path)},
+    )
+
+    assert captured["files_base_dir"] == str(tmp_path)
+
+
+def test_import_uses_attachments_folder_from_the_form(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured = _capture_import_kwargs(monkeypatch)
+    csv_path = write_csv(tmp_path / "imp.csv", ["title"], [["t"]])
+    files = tmp_path / "files"
+    files.mkdir()
+
+    gui.app.testing = True
+    gui.app.test_client().post(
+        "/",
+        data={
+            "export_type": "imports",
+            "import_path": str(csv_path),
+            "files_base_dir": str(files),
+        },
+    )
+
+    assert captured["files_base_dir"] == str(files)
+
+
+def test_import_rejects_missing_attachments_folder(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured = _capture_import_kwargs(monkeypatch)
+    csv_path = write_csv(tmp_path / "imp.csv", ["title"], [["t"]])
+
+    gui.app.testing = True
+    resp = gui.app.test_client().post(
+        "/",
+        data={
+            "export_type": "imports",
+            "import_path": str(csv_path),
+            "files_base_dir": str(tmp_path / "nope"),
+        },
+    )
+
+    assert resp.status_code == 302
+    assert captured == {}  # the importer was never created

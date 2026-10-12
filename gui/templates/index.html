@@ -116,6 +116,14 @@
                         required
                 />
 
+                <label for="files_base_dir">Attachments folder (optional):</label>
+                <input
+                        type="text"
+                        id="files_base_dir"
+                        name="files_base_dir"
+                        placeholder="Folder that relative paths in the CSV refer to"
+                />
+
                 <label for="imp_category" id="imp_category_label">Template:</label>
                 <select name="category" id="imp_category">
                     {% for cat in import_categories %}
