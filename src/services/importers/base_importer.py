@@ -198,6 +198,18 @@ class BaseImporter(ABC):
                 return original
         return None
 
+    def _body_column(self, defs: dict[str, tuple[str, dict]]) -> str | None:
+        """Return the column holding the body text, or None.
+
+        An exact ``body`` column always wins. A looser match ("Body Text") is
+        only taken when the entry/template has no field of that name, so a real
+        field such as "Body Weight" is never mistaken for the body.
+        """
+        col = self._find_col_like("body")
+        if col is None or canonicalize(col) == "body":
+            return col
+        return None if canonicalize(col) in defs else col
+
     def _find_path_col(self) -> str | None:
         """Find a column name that matches any known file path aliases."""
         path_aliases = {
@@ -931,7 +943,7 @@ class BaseImporter(ABC):
         if effective_template is not None:
             data["template"] = effective_template
 
-        body_col = self._find_col_like("body")
+        body_col = self._body_column(self._field_defs_for(None, template))
         if body_col and body_col in row:
             body_val = row[body_col]
             if not pd.isna(body_val) and str(body_val).strip():
@@ -1658,6 +1670,8 @@ class BaseImporter(ABC):
             canonicalize(col) for col in self.find_permission_columns(row).values()
         }
         known |= self._category_known_columns()
+        if body_col := self._body_column(self._field_defs_for(None, template)):
+            known.add(canonicalize(body_col))
         self.post_extra_fields_from_row(entity_id, row, known_columns=known)
 
         self._increment_new_counter()

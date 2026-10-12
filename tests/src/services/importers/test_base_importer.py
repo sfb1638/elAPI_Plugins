@@ -396,3 +396,17 @@ def test_get_category_id_accepts_float_text_and_rejects_fractions() -> None:
     assert imp.get_category_id(pd.Series({"Category ID": "12.0"})) == "12"
     with pytest.raises(ValueError):
         imp.get_category_id(pd.Series({"Category ID": "1.5"}))
+
+
+def test_body_column_ignores_columns_that_are_template_fields() -> None:
+    imp = DummyImporter(pd.DataFrame({"title": ["x"], "Body Weight": ["25 g"]}))
+    defs = {"bodyweight": ("Body Weight", {"type": "text"})}
+
+    assert imp._body_column({}) == "Body Weight"  # nothing says otherwise
+    assert imp._body_column(defs) is None
+
+
+def test_body_column_exact_match_always_wins() -> None:
+    imp = DummyImporter(pd.DataFrame({"body": ["x"]}))
+
+    assert imp._body_column({"body": ("body", {"type": "text"})}) == "body"

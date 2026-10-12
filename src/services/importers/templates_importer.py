@@ -190,7 +190,7 @@ class TemplatesImporter(BaseImporter):
 
         existing_json = self.get_existing_json(template_row_id)
 
-        body_col = self._find_col_like("body")
+        body_col = self._body_column(self._field_defs_from_json(existing_json))
         if body_col and body_col in row:
             body_val = row[body_col]
             if body_col in vals_to_delete:
@@ -248,6 +248,8 @@ class TemplatesImporter(BaseImporter):
             for col in self.find_permission_columns(row).values()
         }
         known |= self._category_known_columns()
+        if body_col:
+            known.add(canonicalize_field(body_col))
         self.post_extra_fields_from_row(
             template_row_id,
             row,
