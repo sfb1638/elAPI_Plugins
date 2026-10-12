@@ -258,8 +258,12 @@ def setup() -> str | WerkzeugResponse:
         existing["api_token"] = api_token
 
         os.makedirs(os.path.dirname(ELAPI_CONFIG_PATH), exist_ok=True)
-        with open(ELAPI_CONFIG_PATH, "w") as fh:
+        # The file holds the API token: owner-only, whether it is new (the mode
+        # given to os.open) or already existed with looser permissions (chmod).
+        fd = os.open(ELAPI_CONFIG_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as fh:
             yaml.safe_dump(existing, fh, default_flow_style=False, sort_keys=False)
+        os.chmod(ELAPI_CONFIG_PATH, 0o600)
 
         # Set env vars so Dynaconf picks them up immediately
         os.environ["ELAPI_HOST"] = host

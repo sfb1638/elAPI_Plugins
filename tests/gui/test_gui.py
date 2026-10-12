@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import os
 from pathlib import Path
 from typing import Any
 
@@ -574,3 +575,28 @@ def test_import_rejects_missing_attachments_folder(
 
     assert resp.status_code == 302
     assert captured == {}  # the importer was never created
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permission bits")
+@pytest.mark.parametrize("preexisting", [False, True])
+def test_setup_writes_token_file_owner_only(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, preexisting: bool
+) -> None:
+    config = tmp_path / "cfg" / "elapi.yml"
+    config.parent.mkdir()
+    if preexisting:
+        config.write_text("host: old\napi_token: old\n")
+        config.chmod(0o644)
+    monkeypatch.setattr(gui, "ELAPI_CONFIG_PATH", str(config))
+    monkeypatch.setenv("ELAPI_HOST", "")
+    monkeypatch.setenv("ELAPI_API_TOKEN", "")
+
+    gui.app.testing = True
+    resp = gui.app.test_client().post(
+        "/setup",
+        data={"host": "https://example.org", "api_token": "secret-token"},
+    )
+
+    assert resp.status_code == 302
+    assert "secret-token" in config.read_text()
+    assert (config.stat().st_mode & 0o777) == 0o600
