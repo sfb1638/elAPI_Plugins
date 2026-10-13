@@ -34,6 +34,7 @@ except json.JSONDecodeError as exc:
 class ExperimentsImporter(BaseImporter):
     """Importer for the ElabFTW ``experiments`` endpoint."""
 
+    _CONFIG = CONFIG
     _KNOWN_POST_FIELDS: set[str] = set(CONFIG["known_post_fields"])
     # Template a new entry is created from; read up front to check extra fields.
     _TEMPLATE_ENDPOINT = "experiments_templates"

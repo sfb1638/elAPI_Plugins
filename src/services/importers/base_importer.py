@@ -105,6 +105,10 @@ class BaseImporter(ABC):
     # Templates carry neither a date nor a status.
     _SUPPORTS_ENTRY_META: bool = True
 
+    # The importer config (path column aliases, date formats). Defaults to the
+    # resources config; a subclass with its own config file overrides it.
+    _CONFIG: dict[str, Any] = CONFIG
+
     # Subclasses must populate these at construction time.
     _KNOWN_POST_FIELDS: tuple[str, ...] = ()
     _template_id: int | str | None = None
@@ -213,7 +217,7 @@ class BaseImporter(ABC):
     def _find_path_col(self) -> str | None:
         """Find a column name that matches any known file path aliases."""
         path_aliases = {
-            canonicalize(alias).replace("_", "") for alias in CONFIG["path_col"]
+            canonicalize(alias).replace("_", "") for alias in self._CONFIG["path_col"]
         }
         return next(
             (
@@ -268,7 +272,7 @@ class BaseImporter(ABC):
         if not date_str:
             return None
 
-        for pattern in CONFIG["date_patterns"]:
+        for pattern in self._CONFIG["date_patterns"]:
             try:
                 dt = datetime.strptime(date_str, pattern)
                 return dt.strftime("%Y-%m-%d")

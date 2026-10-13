@@ -2523,3 +2523,30 @@ def test_update_does_not_touch_an_entry_it_cannot_read(
 
     assert patches == []  # the existing body was never overwritten
     assert importer.skipped_count == 1
+
+
+def test_importer_configs_list_every_permission_column() -> None:
+    from src.services.importers import base_importer, resources_importer
+    from src.services.importers.base_importer import (
+        PERMISSION_FIELDS,
+        PERMISSION_LIST_KEYS,
+    )
+
+    wanted = {
+        f"{field}_{part}"
+        for field in PERMISSION_FIELDS
+        for part in ("base", *PERMISSION_LIST_KEYS)
+    }
+    for config in (exp_module.CONFIG, resources_importer.CONFIG, base_importer.CONFIG):
+        assert wanted <= set(config["known_post_fields"])
+
+
+def test_experiments_importer_reads_its_own_config(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setitem(exp_module.CONFIG, "path_col", ["my_special_files"])
+    importer = _make_importer(
+        monkeypatch, tmp_path, ["title", "my_special_files"], [["t", "x"]]
+    )
+
+    assert importer._find_path_col() == "my_special_files"
