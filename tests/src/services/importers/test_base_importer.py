@@ -50,8 +50,10 @@ def test_get_tags_parsing() -> None:
     imp = DummyImporter(df)
     row = pd.Series({"Tags": "a; b | c"})
     imp._cols_canon = {"tags": "Tags"}
-    tags = imp.get_tags(row)
-    assert tags == ["a", "b | c"] or tags == ["a", "b", "c"]
+    assert imp._get_tags(row) == ["a", "b", "c"]
+    assert imp._get_tags(pd.Series({"Tags": "x; y, z"})) == ["x", "y", "z"]
+    assert imp._get_tags(pd.Series({"Tags": "solo"})) == ["solo"]
+    assert imp._get_tags(pd.Series({"Tags": "a,,b; ;a"})) == ["a", "b"]
 
 
 def test_get_category_id() -> None:

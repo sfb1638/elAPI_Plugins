@@ -486,14 +486,8 @@ class BaseImporter(ABC):
         if isinstance(val, (list, tuple, set)):
             tags = [str(x).strip() for x in val if str(x).strip()]
         elif isinstance(val, str):
-            # detect delimiter
-            for delim in [";", ",", "|"]:
-                if delim in val:
-                    parts = val.split(delim)
-                    break
-            else:
-                parts = [val]
-            tags = [p.strip() for p in parts if p.strip()]
+            # Any of ; , | separates tags, even mixed in one cell ("a; b, c").
+            tags = [p.strip() for p in re.split(r"[;,|]", val) if p.strip()]
         else:
             s = str(val).strip()
             if not s or s.lower() in {"nan", "none", "null"}:
