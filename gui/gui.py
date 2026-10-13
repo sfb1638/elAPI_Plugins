@@ -55,7 +55,15 @@ from src.utils import endpoints
 from src.utils.common import paged_fetch
 from src.utils.logging_config import setup_logging
 
-LOG_LEVEL = "DEBUG"
+DEFAULT_LOG_LEVEL = "DEBUG"
+
+
+def _resolve_log_level() -> str:
+    """The GUI logs at DEBUG unless the LOG_LEVEL environment variable says otherwise."""
+    return (os.environ.get("LOG_LEVEL") or "").strip() or DEFAULT_LOG_LEVEL
+
+
+LOG_LEVEL = _resolve_log_level()
 setup_logging(level=LOG_LEVEL, force=True)
 logger = logging.getLogger(__name__)
 

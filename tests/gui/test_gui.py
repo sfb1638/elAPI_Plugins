@@ -668,3 +668,16 @@ def test_exported_file_is_deleted_after_download(
     assert resp.data == b"xlsx-bytes"
     assert "exp.xlsx" in resp.headers["Content-Disposition"]
     assert not out.exists()
+
+
+def test_log_level_defaults_to_debug_and_honours_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("LOG_LEVEL", raising=False)
+    assert gui._resolve_log_level() == "DEBUG"
+
+    monkeypatch.setenv("LOG_LEVEL", "  warning ")
+    assert gui._resolve_log_level() == "warning"
+
+    monkeypatch.setenv("LOG_LEVEL", "   ")
+    assert gui._resolve_log_level() == "DEBUG"
