@@ -506,9 +506,6 @@ class BaseImporter(ABC):
                 out.append(tag)
         return out
 
-    def _get_tags_str(self, row: pd.Series) -> str | None:
-        return "|".join(self._get_tags(row))
-
     def validate_category_id(self, cid: str) -> None:
         """Validate that a category ID is numeric."""
         if not str(cid).isdigit():
@@ -996,22 +993,6 @@ class BaseImporter(ABC):
             )
         return existing
 
-    def fetch_extra_fields_mapping(
-        self, elab_json: dict[str, Any]
-    ) -> dict[str, dict[str, Any]]:
-        """Map canonicalized extra field titles to their definitions."""
-        metadata_decoded = elab_json.get("metadata_decoded", {})
-        extra_fields = metadata_decoded.get("extra_fields", [])
-        mapping: dict[str, dict[str, Any]] = {}
-        if isinstance(extra_fields, list):
-            for field in extra_fields:
-                if not isinstance(field, dict):
-                    continue
-                title = field.get("title") or field.get("slug") or field.get("name")
-                if title:
-                    mapping[canonicalize(title)] = field
-        return mapping
-
     # endregion
 
     # region --- File uploads ---
@@ -1063,102 +1044,6 @@ class BaseImporter(ABC):
             resolved_path = (self.files_base_dir / resolved_path).resolve()
 
         return resolved_path
-
-    def _attach_files(
-        self,
-        entry_id: int | str,
-        folder: str | Path,
-        recursive: bool = True,
-        chunk_size: int = 10,
-    ) -> None:
-        entry_id = str(entry_id)
-
-        if not entry_id.isdigit():
-            raise ValueError(f"Invalid elabFTW entry ID for upload: {entry_id!r}")
-
-        logger.info("Uploading files for elabFTW entry ID %s from %s", entry_id, folder)
-        files = self._iter_files_in_dir(folder, recursive=recursive)
-        if not files:
-            logger.warning("No files to upload from: %s", folder)
-            return
-
-        def _mime_or_default(p: Path) -> str:
-            return mimetypes.guess_type(p.name)[0] or "application/octet-stream"
-
-        def _send_batch(batch: list[Path]) -> bool:
-            payload = []
-            handles = []
-            try:
-                for fp in batch:
-                    fh = fp.open("rb")
-                    handles.append(fh)
-                    payload.append(("files[]", (fp.name, fh, _mime_or_default(fp))))
-                try:
-                    resp = self.endpoint.post(
-                        endpoint_id=entry_id, sub_endpoint_name="uploads", files=payload
-                    )
-                    resp.raise_for_status()
-                    logger.debug(
-                        "Uploaded batch of %d files for resource %s", len(batch), entry_id
-                    )
-                    return True
-                except Exception as exc:
-                    logger.info("Batched upload (%d files) failed: %s", len(batch), exc)
-                    return False
-            finally:
-                for h in handles:
-                    try:
-                        h.close()
-                    except Exception:
-                        pass
-
-        if chunk_size and chunk_size > 1:
-            i = 0
-            all_batches_ok = True
-            while i < len(files):
-                batch = files[i : i + chunk_size]
-                ok = _send_batch(batch)
-                if not ok:
-                    all_batches_ok = False
-                    break
-                i += chunk_size
-            if all_batches_ok:
-                logger.info(
-                    "Uploaded %d files in %d batch(es).",
-                    len(files),
-                    (len(files) + chunk_size - 1) // chunk_size,
-                )
-                return
-
-        errors: list[str] = []
-        for fp in files:
-            try:
-                logger.debug("Uploading file %s to resource %s", fp, entry_id)
-                with fp.open("rb") as fh:
-                    resp = self.endpoint.post(
-                        endpoint_id=entry_id,
-                        sub_endpoint_name="uploads",
-                        files=[("files[]", (fp.name, fh, _mime_or_default(fp)))],
-                    )
-                try:
-                    resp.raise_for_status()
-                    continue
-                except Exception:
-                    with fp.open("rb") as fh2:
-                        resp2 = self.endpoint.post(
-                            endpoint_id=entry_id,
-                            sub_endpoint_name="uploads",
-                            files={"file": (fp.name, fh2, _mime_or_default(fp))},
-                        )
-                    resp2.raise_for_status()
-            except Exception as exc:
-                logger.error(
-                    "Failed to upload file %s to resource %s: %s", fp, entry_id, exc
-                )
-                errors.append(f"{fp}: {exc}")
-
-        if errors:
-            raise RuntimeError("One or more uploads failed:\n- " + "\n- ".join(errors))
 
     def attach_single_file(self, entity_id: int | str, file: str | Path) -> None:
         """Upload a single file; prefer 'files[]' format, fallback to 'file'."""
@@ -1338,52 +1223,6 @@ class BaseImporter(ABC):
                         link_id,
                         exc,
                     )
-
-    def patch_decoded_extra_fields(
-        self, elab_id: str, row: pd.Series, known_columns: Iterable[str]
-    ) -> None:
-        """Patch extra fields using the metadata_decoded (list) format, skipping known columns."""
-        existing = self.get_existing_json(elab_id)
-        if not existing:
-            return
-        extra_map = self.fetch_extra_fields_mapping(existing)
-        if not extra_map:
-            return
-        known_canon = {canonicalize(column) for column in known_columns}
-        updated_fields: list[str] = []
-        for column in row.index:
-            canon_col = canonicalize(column)
-            if canon_col in extra_map and canon_col not in known_canon:
-                value = row[column]
-                if pd.isna(value):
-                    normalized_value: Any = ""
-                else:
-                    if hasattr(value, "item") and not isinstance(value, str):
-                        try:
-                            value = value.item()
-                        except Exception:
-                            pass
-                    field = extra_map[canon_col]
-                    if field.get("type") in {"items", "experiments"}:
-                        normalized_value = self._coerce_for_field(field, value)
-                        if normalized_value is None:
-                            logger.warning(
-                                "Skipping link field %r with invalid ID %r.",
-                                column,
-                                value,
-                            )
-                            continue
-                    else:
-                        normalized_value = str(value)
-                extra_map[canon_col]["value"] = normalized_value
-                updated_fields.append(canon_col)
-        patch_data = {"metadata": {"extra_fields": list(extra_map.values())}}
-        try:
-            logger.debug("Patching extra fields for id %s: %s", elab_id, updated_fields)
-            response = self.endpoint.patch(endpoint_id=elab_id, data=patch_data)
-            response.raise_for_status()
-        except Exception as exc:
-            logger.error("Failed to patch extra fields for id %s: %s", elab_id, exc)
 
     @classmethod
     def _extract_rename_map(cls, row: pd.Series) -> dict[str, str]:

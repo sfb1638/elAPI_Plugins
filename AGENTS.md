@@ -98,7 +98,6 @@ elAPI_Plugins/
 │   │   ├── csv_tools.py              # CsvTools: encoding/delimiter detection, normalization
 │   │   ├── endpoints.py              # get_fixed(name) -> elapi FixedEndpoint
 │   │   ├── paths.py                  # resource/config path resolution
-│   │   ├── validators.py             # IDValidator and friends
 │   │   └── logging_config.py         # logging setup
 │   │
 │   └── updater/                      # self-update logic
@@ -106,8 +105,7 @@ elAPI_Plugins/
 ├── config/                           # runtime JSON config
 │   ├── exp_importer_config.json
 │   ├── res_importer_config.json
-│   ├── logging_config.json
-│   └── misc_config.json
+│   └── logging_config.json
 │
 ├── tests/                            # pytest suite (mirrors src/ layout)
 │   ├── conftest.py                   # FakeEndpoint, FakeResponse, write_csv helpers

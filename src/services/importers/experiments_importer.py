@@ -69,14 +69,12 @@ class ExperimentsImporter(BaseImporter):
             self._experiments_df.columns
         )
         self._template_id: int | str | None = template_id
-        self._category_col: str | None = self.resolve_category_col()
         self._files_base_dir: Path | None = (
             Path(files_base_dir).expanduser() if files_base_dir else None
         )
         self._new_experiments_counter: int = 0
         self._patched_experiments_counter: int = 0
         self._skipped_experiments_counter: int = 0
-        self._attached_files_counter: int = 0
         self._update_existing: bool = update_existing
         self._default_category: str | None = self.normalize_id(category_id)
         if self._default_category is not None:

@@ -68,7 +68,6 @@ class ResourcesImporter(BaseImporter):
             self._resources_df.columns
         )
         self._template_id: int | str | None = template_id
-        self._category_col: str | None = self.resolve_category_col()
         self._files_base_dir: Path | None = (
             Path(files_base_dir).expanduser() if files_base_dir else None
         )

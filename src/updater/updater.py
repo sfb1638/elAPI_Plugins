@@ -288,31 +288,6 @@ def check_for_update (
         )
 
 
-def download_asset (
-    url: str,
-    dest: pathlib.Path | str,
-    *,
-    session: requests.Session | None = None,
-    timeout: int = DEFAULT_TIMEOUT,
-    chunk_size: int = 1 << 16,
-    ) -> pathlib.Path:
-    """
-    Stream-download a release asset to `dest`.
-    """
-    target = pathlib.Path(dest)
-    target.parent.mkdir(parents=True, exist_ok=True)
-
-    sess = session or requests.Session()
-    with sess.get(url, stream=True, timeout=timeout,
-                  headers=_auth_headers()) as resp:
-        resp.raise_for_status()
-        with target.open("wb") as fh:
-            for chunk in resp.iter_content(chunk_size=chunk_size):
-                if chunk:
-                    fh.write(chunk)
-    return target
-
-
 def main (argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
     current = args[0] if args else get_current_version()

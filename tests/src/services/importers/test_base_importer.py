@@ -102,70 +102,8 @@ def test_resolve_folder_with_base(tmp_path: Path) -> None:
     assert resolved == (tmp_path / "subdir" / "file.txt").resolve()
 
 
-def test_patch_decoded_extra_fields(monkeypatch: pytest.MonkeyPatch) -> None:
-    df = pd.DataFrame({"Extra Field": ["value"]})
-    imp = DummyImporter(df)
-
-    def fake_get(**kwargs: Any) -> FakeResponse:
-        return FakeResponse(
-            json_data={
-                "metadata_decoded": {
-                    "extra_fields": [{"title": "Extra Field", "value": ""}]
-                }
-            }
-        )
-
-    captured: dict[str, dict[str, Any]] = {}
-
-    def fake_patch(**kwargs: Any) -> FakeResponse:
-        data = kwargs["data"]
-        if not isinstance(data, dict):
-            raise AssertionError("Expected dict payload for patch")
-        captured["data"] = data
-        return FakeResponse()
-
-    imp._endpoint = FakeEndpoint(get=fake_get, patch=fake_patch)
-    row = pd.Series({"Extra Field": "updated"})
-
-    imp.patch_decoded_extra_fields("1", row, known_columns=set())
-    assert "metadata" in captured["data"]
 
 
-def test_patch_decoded_link_field_uses_id_string() -> None:
-    df = pd.DataFrame({"Cloning Experiment ID": [22576.0, None]})
-    imp = DummyImporter(df)
-
-    def fake_get(**kwargs: Any) -> FakeResponse:
-        return FakeResponse(
-            json_data={
-                "metadata_decoded": {
-                    "extra_fields": [
-                        {
-                            "title": "Cloning Experiment ID",
-                            "type": "experiments",
-                            "value": "",
-                        }
-                    ]
-                }
-            }
-        )
-
-    captured: dict[str, dict[str, Any]] = {}
-
-    def fake_patch(**kwargs: Any) -> FakeResponse:
-        captured["data"] = kwargs["data"]
-        return FakeResponse()
-
-    imp._endpoint = FakeEndpoint(get=fake_get, patch=fake_patch)
-    imp.patch_decoded_extra_fields("1", df.iloc[0], known_columns=set())
-
-    field = captured["data"]["metadata"]["extra_fields"][0]
-    # eLabFTW needs the linked id as a JSON string, not a number.
-    assert field["value"] == "22576"
-    assert isinstance(field["value"], str)
-
-
-# region --- validate_row ---
 
 
 def _patch_lookup(

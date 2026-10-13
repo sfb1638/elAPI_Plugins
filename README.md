@@ -298,7 +298,7 @@ elAPI_Plugins/
 │   │   ├── importers/       CSV → eLabFTW import logic (resources, experiments)
 │   │   └── exporters/       eLabFTW → Excel export logic
 │   ├── updater/             GitHub release checker and asset downloader
-│   └── utils/               CSV parsing, endpoint definitions, logging, validators
+│   └── utils/               CSV parsing, endpoint definitions, logging
 ├── gui/
 │   ├── gui.py               Flask-based web GUI entry point
 │   ├── templates/           HTML templates

@@ -21,6 +21,5 @@
     "%Y/%m/%d",
     "%Y.%m.%d",
     "%Y-%m-%d"
-  ],
-  "upload_chunk_size": 10
+  ]
 }
