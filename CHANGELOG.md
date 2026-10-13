@@ -5,7 +5,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.3.0] — 2026-10-13
+
+The first stable release of the 1.3 series. It includes everything from
+1.3.0b1 (permissions from the CSV, importing and patching templates) plus row
+validation, an attachments-folder field for imports, and a long list of fixes.
 
 ### Added
 
@@ -212,7 +216,8 @@ live instance — please report anything that misbehaves.
 - First stable release: export resources and experiments to `.xlsx`, import
   entries from CSV, and a local web GUI.
 
-[1.3.0b1]: https://github.com/sfb1638/elAPI_Plugins/compare/v1.2.0...v1.3.0b1
+[1.3.0]: https://github.com/sfb1638/elAPI_Plugins/compare/v1.2.0...v1.3.0
+[1.3.0b1]: https://github.com/sfb1638/elAPI_Plugins/compare/v1.2.0...1.3.0b1
 [1.2.0]: https://github.com/sfb1638/elAPI_Plugins/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/sfb1638/elAPI_Plugins/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/sfb1638/elAPI_Plugins/compare/v1.0.0...v1.0.1
