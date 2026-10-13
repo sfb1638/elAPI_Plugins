@@ -2493,3 +2493,33 @@ def test_create_new_sets_date_and_status(
 
     assert {"date": "2024-02-01", "status": "3"} in patches
     assert all("metadata" not in p for p in patches)
+
+
+@pytest.mark.parametrize("status", [404, 500])
+def test_get_existing_json_ignores_error_bodies(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, status: int
+) -> None:
+    importer = _make_importer(
+        monkeypatch, tmp_path, ["title"], [["t"]],
+        get=lambda **kw: FakeResponse(status, json_data={"message": "Not Found"}),
+    )
+
+    assert importer.get_existing_json("1") == {}
+
+
+def test_update_does_not_touch_an_entry_it_cannot_read(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    patches: list[Any] = []
+    importer = _make_importer(
+        monkeypatch, tmp_path, ["experiment id", "title", "body"],
+        [[7, "new title", "appended text"]],
+        get=lambda **kw: FakeResponse(500, json_data={"message": "server error"}),
+        patch=lambda **kw: patches.append(kw) or FakeResponse(),
+        update_existing=True,
+    )
+
+    assert importer.create_all_from_csv() == []
+
+    assert patches == []  # the existing body was never overwritten
+    assert importer.skipped_count == 1

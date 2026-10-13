@@ -152,7 +152,7 @@ class ResourcesImporter(BaseImporter):
             row[list(rename_map.keys())] = ""
         row.drop(fields_to_delete, inplace=True)
 
-        existing_json = self.get_existing_json(resource_id)
+        existing_json = self._require_existing_json(resource_id, "resource")
 
         body_col = self._body_column(self._field_defs_from_json(existing_json))
         if body_col and body_col in row:

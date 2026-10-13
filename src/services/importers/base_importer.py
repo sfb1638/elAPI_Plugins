@@ -962,16 +962,35 @@ class BaseImporter(ABC):
         return exp_id
 
     def get_existing_json(self, elab_id: str) -> dict[str, Any]:
-        """Fetch existing record JSON for id; return empty dict on failure."""
+        """Fetch existing record JSON for id; return empty dict on failure.
+
+        An HTTP error counts as a failure: its JSON body is an error message,
+        not an entry, and must not be mistaken for one.
+        """
         try:
             logger.debug("Fetching existing JSON for id %s", elab_id)
             response = self.endpoint.get(endpoint_id=elab_id)
+            response.raise_for_status()
             response_json = response.json()
             if isinstance(response_json, dict):
                 return response_json
         except Exception as exc:
             logger.warning("Failed to fetch existing JSON for id %s: %s", elab_id, exc)
         return {}
+
+    def _require_existing_json(self, elab_id: str, label: str) -> dict[str, Any]:
+        """Like get_existing_json, but refuse to go on when the entry can't be read.
+
+        An update appends to the entry's body and tags. Without the current
+        values it would overwrite the body instead, so it must not start.
+        """
+        existing = self.get_existing_json(elab_id)
+        if not existing:
+            raise RuntimeError(
+                f"Could not read {label} {elab_id}; not updating it "
+                "(does it exist, and is the connection working?)"
+            )
+        return existing
 
     def fetch_extra_fields_mapping(
         self, elab_json: dict[str, Any]
