@@ -6,6 +6,7 @@ import sys
 import tempfile
 import threading
 import time
+import uuid
 import webbrowser
 from pathlib import Path
 from typing import Any
@@ -90,6 +91,16 @@ def _format_skipped_rows(skipped_rows: list[Any]) -> str:
     if hidden > 0:
         lines.append(f"...and {hidden} more (see app.log).")
     return "\n".join(lines)
+
+
+def _send_and_remove(path: str | Path) -> Response:
+    """Send a generated file as a download and delete it from disk afterwards."""
+    file_path = Path(path)
+    try:
+        data = file_path.read_bytes()
+    finally:
+        file_path.unlink(missing_ok=True)
+    return send_file(io.BytesIO(data), as_attachment=True, download_name=file_path.name)
 
 
 def resource_path(rel_path: str) -> str:
@@ -384,13 +395,13 @@ def index() -> str | WerkzeugResponse:
             fname = request.form.get("filename") or None
             exporter = ExporterFactory.get_exporter("resources", cid)
             path = exporter.xlsx_export(fname)
-            return send_file(path, as_attachment=True)  # type: ignore[arg-type]
+            return _send_and_remove(path)
 
         elif action == "experiments":
             fname = request.form.get("exp_filename") or None
             exporter = ExporterFactory.get_exporter("experiments")
             path = exporter.xlsx_export(fname)
-            return send_file(path, as_attachment=True)  # type: ignore[arg-type]
+            return _send_and_remove(path)
 
         elif action == "template_resources":
             cid = int(request.form["category"])
@@ -448,6 +459,8 @@ def index() -> str | WerkzeugResponse:
 
             # (Optional) support "path import" in future
             import_path = (request.form.get("import_path") or "").strip()
+            uploaded_copy: str | None = None  # temp file to delete afterwards
+            source_label = ""
             import_target = (request.form.get("import_target") or "resources").strip().lower()
             logger.info("Import target: %s", import_target)
 
@@ -462,15 +475,24 @@ def index() -> str | WerkzeugResponse:
                     flash("No file selected and no path provided", "error")
                     return redirect(url_for("index"))
 
+                # A unique name: two uploads called "data.csv" must not clash.
                 filename = secure_filename(uploaded.filename)
-                source = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+                source = os.path.join(
+                    app.config["UPLOAD_FOLDER"], f"{uuid.uuid4().hex}_{filename}"
+                )
                 uploaded.save(source)
+                uploaded_copy = source
+                source_label = uploaded.filename
+
+            source_label = source_label or source
 
             # Relative paths in the files_path/attachments columns resolve against
             # this folder: the one typed into the form, else (when the CSV was
             # given by path) the CSV's own folder. An uploaded file has no folder.
             files_dir = (request.form.get("files_base_dir") or "").strip()
             if files_dir and not os.path.isdir(os.path.expanduser(files_dir)):
+                if uploaded_copy:
+                    os.remove(uploaded_copy)
                 flash(f"Attachments folder not found: {files_dir}", "error")
                 return redirect(url_for("index"))
             files_base_dir = files_dir or (
@@ -519,13 +541,13 @@ def index() -> str | WerkzeugResponse:
                 suffix = f"; skipped {skipped}" if skipped else ""
                 if update_existing:
                     flash(
-                        f"Updated {count} existing {import_target} from {source}"
+                        f"Updated {count} existing {import_target} from {source_label}"
                         + suffix,
                         "success",
                     )
                 else:
                     flash(
-                        f"Imported {count} {import_target} from {source}" + suffix,
+                        f"Imported {count} {import_target} from {source_label}" + suffix,
                         "success",
                     )
 
@@ -535,6 +557,12 @@ def index() -> str | WerkzeugResponse:
 
             except Exception as e:
                 flash(f"Import failed: {e}", "error")
+            finally:
+                if uploaded_copy:
+                    try:
+                        os.remove(uploaded_copy)
+                    except OSError:
+                        logger.debug("Could not remove %s", uploaded_copy)
 
             return redirect(url_for("index"))
 

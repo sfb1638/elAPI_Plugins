@@ -362,8 +362,8 @@ def test_import_uploads_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     }
     resp = client.post("/", data=data, content_type="multipart/form-data")
     assert resp.status_code == 302
-    saved = tmp_path / "upload.csv"
-    assert saved.exists()
+    # The upload is a temporary copy: it is removed once the import is done.
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_shutdown(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -600,3 +600,71 @@ def test_setup_writes_token_file_owner_only(
     assert resp.status_code == 302
     assert "secret-token" in config.read_text()
     assert (config.stat().st_mode & 0o777) == 0o600
+
+
+def test_uploads_get_unique_names_and_are_removed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    seen: list[str] = []
+    monkeypatch.setattr(
+        gui.endpoints,
+        "get_fixed",
+        lambda name: FakeEndpoint(get=lambda **kw: FakeResponse(json_data={"data": []})),
+    )
+    monkeypatch.setattr(gui, "paged_fetch", lambda *args, **kwargs: [])
+
+    class DummyImporter:
+        def create_all_from_csv(self) -> list[str]:
+            return []
+
+    def fake_get_importer(*args: Any, **kwargs: Any) -> DummyImporter:
+        assert Path(kwargs["csv_path"]).exists()  # still there while importing
+        seen.append(kwargs["csv_path"])
+        return DummyImporter()
+
+    monkeypatch.setattr(gui.ImporterFactory, "get_importer", fake_get_importer)
+    gui.app.testing = True
+    gui.app.config["UPLOAD_FOLDER"] = tmp_path
+    client = gui.app.test_client()
+
+    for _ in range(2):
+        client.post(
+            "/",
+            data={
+                "export_type": "imports",
+                "import_file": (io.BytesIO(b"title\nx"), "data.csv"),
+            },
+            content_type="multipart/form-data",
+        )
+
+    assert len(set(seen)) == 2  # same upload name, different temp files
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_exported_file_is_deleted_after_download(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        gui.endpoints,
+        "get_fixed",
+        lambda name: FakeEndpoint(get=lambda **kw: FakeResponse(json_data={"data": []})),
+    )
+    monkeypatch.setattr(gui, "paged_fetch", lambda *args, **kwargs: [])
+    out = tmp_path / "exp.xlsx"
+
+    class DummyExporter:
+        def xlsx_export(self, filename: str | None = None) -> Path:
+            out.write_bytes(b"xlsx-bytes")
+            return out
+
+    monkeypatch.setattr(
+        gui.ExporterFactory, "get_exporter", lambda *a, **k: DummyExporter()
+    )
+    gui.app.testing = True
+
+    resp = gui.app.test_client().post("/", data={"export_type": "experiments"})
+
+    assert resp.status_code == 200
+    assert resp.data == b"xlsx-bytes"
+    assert "exp.xlsx" in resp.headers["Content-Disposition"]
+    assert not out.exists()
