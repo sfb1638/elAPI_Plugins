@@ -412,3 +412,36 @@ def test_body_column_exact_match_always_wins() -> None:
     imp = DummyImporter(pd.DataFrame({"body": ["x"]}))
 
     assert imp._body_column({"body": ("body", {"type": "text"})}) == "body"
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    ["null", "[]", '{"extra_fields": null}', '{"extra_fields": []}', None, {"extra_fields": None}],
+)
+def test_post_extra_fields_survives_null_metadata(metadata: Any) -> None:
+    patched: list[dict[str, Any]] = []
+    endpoint = FakeEndpoint(
+        get=FakeResponse(json_data={"metadata": metadata}),
+        patch=lambda **kwargs: patched.append(kwargs["data"]) or FakeResponse(),
+    )
+    imp = DummyImporter(pd.DataFrame({"title": ["x"]}))
+    imp._endpoint = endpoint
+
+    imp.post_extra_fields_from_row("5", pd.Series({"Genotype": "wt"}))
+
+    sent = json.loads(patched[0]["metadata"])
+    assert sent["extra_fields"] == {"Genotype": {"value": "wt"}}
+
+
+def test_post_extra_fields_leaves_unexpected_extra_fields_alone() -> None:
+    patched: list[dict[str, Any]] = []
+    endpoint = FakeEndpoint(
+        get=FakeResponse(json_data={"metadata": {"extra_fields": ["odd"]}}),
+        patch=lambda **kwargs: patched.append(kwargs["data"]) or FakeResponse(),
+    )
+    imp = DummyImporter(pd.DataFrame({"title": ["x"]}))
+    imp._endpoint = endpoint
+
+    imp.post_extra_fields_from_row("5", pd.Series({"Genotype": "wt"}))
+
+    assert patched == []

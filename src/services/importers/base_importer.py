@@ -1392,13 +1392,25 @@ class BaseImporter(ABC):
 
         if isinstance(raw_metadata, str):
             try:
-                metadata = json.loads(raw_metadata)
+                raw_metadata = json.loads(raw_metadata)
             except Exception:
-                metadata = {}
-        else:
-            metadata = raw_metadata
+                raw_metadata = {}
+        # "null", a list or a number is valid JSON but not usable metadata.
+        metadata: dict[str, Any] = (
+            raw_metadata if isinstance(raw_metadata, dict) else {}
+        )
 
-        elab_extra_fields: dict[str, dict] = metadata.setdefault("extra_fields", {})
+        elab_extra_fields = metadata.get("extra_fields")
+        if elab_extra_fields is None or elab_extra_fields == []:
+            elab_extra_fields = metadata["extra_fields"] = {}
+        elif not isinstance(elab_extra_fields, dict):
+            # Never overwrite data we do not understand.
+            logger.warning(
+                "Entry %s has unexpected extra_fields (%s); leaving them alone.",
+                eid,
+                type(elab_extra_fields).__name__,
+            )
+            return
 
         defs_by_canon: dict[str, str] = {}
         for orig_key in list(elab_extra_fields.keys()):
