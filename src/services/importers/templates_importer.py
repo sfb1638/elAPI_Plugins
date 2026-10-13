@@ -170,6 +170,9 @@ class TemplatesImporter(BaseImporter):
         overwritten, the body is appended to, and tags are added to the existing
         ones. Attachments and links do not exist for templates.
         """
+        # Work on a copy: the markers below blank and drop cells of the row, which
+        # would change the caller's DataFrame (and make pandas warn about it).
+        row = row.copy()
         payload: dict[str, Any] = {}
 
         if category:

@@ -286,3 +286,33 @@ def test_create_skips_row_with_missing_link_target(
     assert len(posts) == 1
     assert importer.skipped_count == 1
     assert importer.skipped_rows[0].reasons == ("Resource 123 does not exist",)
+
+
+def test_patch_existing_does_not_change_the_callers_row(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import warnings
+
+    endpoint = FakeEndpoint(
+        get=FakeResponse(
+            json_data={"metadata": {"extra_fields": {"A": {"value": "x"}}}}
+        ),
+        patch=FakeResponse(),
+        post=FakeResponse(),
+    )
+    monkeypatch.setattr(res_module, "get_fixed", lambda name: endpoint)
+    csv_path = write_csv(
+        tmp_path / "res.csv",
+        ["Resource ID", "title", "A", "B"],
+        [[5, "t", "$delete_V", "$delete_F"]],
+    )
+    importer = res_module.ResourcesImporter(csv_path, update_existing=True)
+    row = importer.basic_df.iloc[0]
+    before = row.copy()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # a pandas SettingWithCopyWarning would fail
+        importer.patch_existing(resource_id="5", row=row)
+
+    assert row.equals(before)
+    assert importer.basic_df.iloc[0].equals(before)

@@ -135,6 +135,9 @@ class ExperimentsImporter(BaseImporter):
         Tags go through the /tags sub-endpoint: PATCHing {"tags": "..."} often
         does not update them.
         """
+        # Work on a copy: the markers below blank and drop cells of the row, which
+        # would change the caller's DataFrame (and make pandas warn about it).
+        row = row.copy()
         payload: dict[str, Any] = {}
 
         if category:
