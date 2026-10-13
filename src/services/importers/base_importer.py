@@ -9,7 +9,7 @@ import mimetypes
 import os
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -110,7 +110,7 @@ class BaseImporter(ABC):
     _CONFIG: dict[str, Any] = CONFIG
 
     # Subclasses must populate these at construction time.
-    _KNOWN_POST_FIELDS: tuple[str, ...] = ()
+    _KNOWN_POST_FIELDS: Collection[str] = ()
     _template_id: int | str | None = None
     _default_category: str | None = None
     # (link sub-endpoint, id) -> exists? Filled lazily by _entity_exists.
@@ -317,7 +317,7 @@ class BaseImporter(ABC):
         self,
         id_col: str | None,
         row: pd.Series,
-        row_index: int | None = None,
+        row_index: Any = None,
         entity_label: str = "Entity",
     ) -> str | None:
         """Extract and validate an entity id from a row; warn and skip on errors."""
@@ -326,7 +326,7 @@ class BaseImporter(ABC):
 
         raw_id = row[id_col]
         eid = self.normalize_id(raw_id)
-        label = f"row {row_index + 1}" if row_index is not None else "row ?"
+        label = f"row {int(row_index) + 1}" if row_index is not None else "row ?"
 
         if eid is None:
             logger.warning(

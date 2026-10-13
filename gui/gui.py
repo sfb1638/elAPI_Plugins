@@ -462,7 +462,7 @@ def index() -> str | WerkzeugResponse:
             # When update-existing is enabled the category dropdown is disabled in the UI
             # and the request may not include a category. Treat it as optional here.
             cid_raw = request.form.get("category")
-            cid = int(cid_raw) if cid_raw else None
+            import_cid = int(cid_raw) if cid_raw else None
             logger.info("Update existing requested? %s", update_existing)
 
             # (Optional) support "path import" in future
@@ -513,8 +513,8 @@ def index() -> str | WerkzeugResponse:
                         "resources",
                         csv_path=source,
                         files_base_dir=files_base_dir,
-                        template_id=cid if not update_existing else None,
-                        category_id=cid if update_existing else None,
+                        template_id=import_cid if not update_existing else None,
+                        category_id=import_cid if update_existing else None,
                         update_existing=update_existing,
                     )
                     ids = importer.create_all_from_csv()

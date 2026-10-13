@@ -6,7 +6,7 @@ import pandas as pd
 
 class BaseExporter(ABC):
     @abstractmethod
-    def xlsx_export(self, export_file: str | None = None) -> Path | None: ...
+    def xlsx_export(self, export_file: str | None = None) -> Path: ...
 
     @abstractmethod
     def fetch_data(

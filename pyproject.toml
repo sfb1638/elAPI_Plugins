@@ -46,6 +46,8 @@ lint = [
 ]
 types = [
     "pandas-stubs>=2.3.3.251219",
+    "types-requests>=2.32.4",
+    "types-PyYAML>=6.0.12",
 ]
 dev = [
     "deptry>=0.24.0",

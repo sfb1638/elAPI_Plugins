@@ -9,6 +9,7 @@ import re
 import sys
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
+from typing import cast
 
 import requests
 from requests.exceptions import HTTPError
@@ -269,7 +270,7 @@ def check_for_update (
             )
 
     tag = str(payload.get("tag_name") or "").strip() or current
-    assets = payload.get("assets") or []
+    assets = cast(list[Mapping[str, object]], payload.get("assets") or [])
     name_pred = _asset_name_matches_mac_arch if _is_macos() else None
     asset_name, asset_url = _pick_asset(assets, preferred_exts,
                                         name_predicate=name_pred)

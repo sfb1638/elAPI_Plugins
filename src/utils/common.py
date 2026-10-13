@@ -10,14 +10,11 @@ from typing import Any, TypeVar
 try:
     import httpx
 except ImportError:  # pragma: no cover - available via elapi at runtime
-    httpx = None
+    httpx = None  # type: ignore[assignment]
 
 import pandas as pd
 from bs4 import BeautifulSoup
-from requests.exceptions import (  # type: ignore[import-untyped]
-    ConnectTimeout,
-    ReadTimeout,
-)
+from requests.exceptions import ConnectTimeout, ReadTimeout
 
 logger = logging.getLogger(__name__)
 
