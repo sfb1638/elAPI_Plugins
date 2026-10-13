@@ -15,7 +15,9 @@ def test_create_new_with_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
         return FakeResponse(headers={"Location": "http://x/resources/99"})
 
     monkeypatch.setattr(
-        res_module, "get_fixed", lambda name: FakeEndpoint(post=fake_post)
+        res_module,
+        "get_fixed",
+        lambda name: FakeEndpoint(post=fake_post, patch=FakeResponse()),
     )
 
     files_dir = tmp_path / "files"

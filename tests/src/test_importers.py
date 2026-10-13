@@ -60,7 +60,7 @@ def test_base_importer_get_category_and_tags() -> None:
 
     cid = importer.get_category_id(row)
     assert cid == "5"
-    assert importer.get_tags(row) == ["a", "b"]
+    assert importer._get_tags(row) == ["a", "b"]
 
 
 def test_base_importer_canonicalize_and_find_col() -> None:
@@ -115,8 +115,8 @@ def test_resources_importer_create_new(
     new_id = importer.create_new(row=importer.basic_df.iloc[0], template=None)
 
     assert new_id == "10"
-    assert dummy_endpoint.last_post_payload is not None
-    assert dummy_endpoint.last_post_payload["title"] == "Hello"
+    # The title is not part of the POST: it is set with a PATCH afterwards.
+    assert dummy_endpoint.last_patch == {"title": "Hello"}
 
 
 def test_resources_importer_attach_single_file_missing(tmp_path: Path) -> None:
@@ -125,7 +125,7 @@ def test_resources_importer_attach_single_file_missing(tmp_path: Path) -> None:
     importer = ResourcesImporter(csv_path=csv_path)
     importer._endpoint = DummyEndpoint()
     with pytest.raises(FileNotFoundError):
-        importer.attach_single_file(resource_id=1, file=tmp_path / "missing.txt")
+        importer.attach_single_file(entity_id=1, file=tmp_path / "missing.txt")
 
 
 def test_resources_importer_post_extra_fields_patches(
@@ -155,7 +155,7 @@ def test_resources_importer_post_extra_fields_patches(
     monkeypatch.setattr(importer, "get_existing_json", fake_existing)
 
     importer.post_extra_fields_from_row(
-        resource_id="1",
+        entity_id="1",
         row=df.iloc[0],
         known_columns={"title"},
     )
@@ -184,7 +184,7 @@ def test_resources_importer_creates_missing_extra_field(
     monkeypatch.setattr(importer, "get_existing_json", lambda _elab_id: {})
 
     importer.post_extra_fields_from_row(
-        resource_id="1",
+        entity_id="1",
         row=df.iloc[0],
         known_columns={"title"},
     )
@@ -268,7 +268,7 @@ def test_resources_importer_link_columns(monkeypatch: pytest.MonkeyPatch) -> Non
     importer._post_links = fake_post_links  # type: ignore[attr-defined]
 
     importer.post_extra_fields_from_row(
-        resource_id="1",
+        entity_id="1",
         row=df.iloc[0],
         known_columns={"title"},
     )
