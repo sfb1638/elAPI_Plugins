@@ -140,6 +140,7 @@ def _read_elapi_config() -> dict:
         pass
     return {"host": "", "api_token": ""}
 
+
 app = Flask(
     __name__,
     template_folder=resource_path("templates"),
@@ -384,9 +385,17 @@ def index() -> str | WerkzeugResponse:
         exp_tmpl_resp = endpoints.get_fixed("experiments_templates").get()
         exp_tmpl_resp.raise_for_status()
         exp_tmpl_data = exp_tmpl_resp.json()
-        exp_tmpl_list = exp_tmpl_data if isinstance(exp_tmpl_data, list) else exp_tmpl_data.get("data", [])
+        exp_tmpl_list = (
+            exp_tmpl_data
+            if isinstance(exp_tmpl_data, list)
+            else exp_tmpl_data.get("data", [])
+        )
         exp_templates = sorted(
-            [{"id": t["id"], "title": t.get("title", "")} for t in exp_tmpl_list if t.get("id")],
+            [
+                {"id": t["id"], "title": t.get("title", "")}
+                for t in exp_tmpl_list
+                if t.get("id")
+            ],
             key=lambda t: t["title"].lower(),
         )
         logger.info("Loaded %d experiment templates", len(exp_templates))
@@ -430,7 +439,7 @@ def index() -> str | WerkzeugResponse:
                 io.BytesIO(buf.getvalue().encode()),
                 mimetype="text/csv",
                 as_attachment=True,
-                download_name=f"resource_{cid}_template.csv"
+                download_name=f"resource_{cid}_template.csv",
             )
         elif action == "template_experiments":
             tid = int(request.form["exp_template_id"])
@@ -453,11 +462,13 @@ def index() -> str | WerkzeugResponse:
                 io.BytesIO(buf.getvalue().encode()),
                 mimetype="text/csv",
                 as_attachment=True,
-                download_name=f"experiment_{tid}_template.csv"
+                download_name=f"experiment_{tid}_template.csv",
             )
 
         elif action == "imports":
-            update_existing = (request.form.get("update_existing") or "no").strip().lower() == "yes"
+            update_existing = (
+                request.form.get("update_existing") or "no"
+            ).strip().lower() == "yes"
 
             # When update-existing is enabled the category dropdown is disabled in the UI
             # and the request may not include a category. Treat it as optional here.
@@ -469,7 +480,9 @@ def index() -> str | WerkzeugResponse:
             import_path = (request.form.get("import_path") or "").strip()
             uploaded_copy: str | None = None  # temp file to delete afterwards
             source_label = ""
-            import_target = (request.form.get("import_target") or "resources").strip().lower()
+            import_target = (
+                (request.form.get("import_target") or "resources").strip().lower()
+            )
             logger.info("Import target: %s", import_target)
 
             if import_path:

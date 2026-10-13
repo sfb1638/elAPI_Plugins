@@ -16,7 +16,7 @@ _ENDPOINT_MAP = {
 
 def get_fixed(name: str) -> FixedEndpoint:
     """Return a FixedEndpoint for one of: resource, category, experiments."""
-    # Sanitize ELN host env vars that the elapi client uses; stray spaces cause DNS errors.
+    # Sanitize the host env vars the elapi client uses; stray spaces break DNS.
     for env_key in ("ELABFTW_HOST", "ELAB_API_URL", "ELABFTW_URL"):
         val = os.environ.get(env_key)
         if val:

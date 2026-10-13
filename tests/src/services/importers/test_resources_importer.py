@@ -131,7 +131,7 @@ def test_patch_existing_preserves_extra_field_name_case(
 def test_patch_existing_id_column_not_written_as_extra_field(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """The 'Resource ID' column only locates the entry; it must not become an extra field."""
+    """The 'Resource ID' column only locates the entry, not an extra field."""
     metadata = {"extra_fields": {"Custom Field": {"type": "text", "value": ""}}}
 
     def fake_get(**kwargs: Any) -> FakeResponse:

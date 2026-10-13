@@ -138,12 +138,15 @@ def test_download_resource_template_omits_category_and_template_columns(
 ) -> None:
     def fake_get_fixed(name: str) -> FakeEndpoint:
         if name == "categories":
+
             def get_category(**kwargs: object) -> FakeResponse:
                 if kwargs.get("endpoint_id") == 1:
                     return FakeResponse(
                         json_data={
                             "id": 1,
-                            "metadata": '{"extra_fields": {"strain": {}, "plasmid": {}}}',
+                            "metadata": (
+                                '{"extra_fields": {"strain": {}, "plasmid": {}}}'
+                            ),
                         }
                     )
                 return FakeResponse(json_data={"data": [{"id": 1, "title": "Cells"}]})
@@ -201,6 +204,7 @@ def test_download_experiment_template_uses_body_column(
             )
 
         if name == "experiments_templates":
+
             def get_template(**kwargs: object) -> FakeResponse:
                 if kwargs.get("endpoint_id") == 7:
                     return FakeResponse(

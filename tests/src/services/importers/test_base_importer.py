@@ -102,10 +102,6 @@ def test_resolve_folder_with_base(tmp_path: Path) -> None:
     assert resolved == (tmp_path / "subdir" / "file.txt").resolve()
 
 
-
-
-
-
 def _patch_lookup(
     monkeypatch: pytest.MonkeyPatch, statuses: dict[tuple[str, int], int]
 ) -> list[tuple[str, int]]:
@@ -354,7 +350,14 @@ def test_body_column_exact_match_always_wins() -> None:
 
 @pytest.mark.parametrize(
     "metadata",
-    ["null", "[]", '{"extra_fields": null}', '{"extra_fields": []}', None, {"extra_fields": None}],
+    [
+        "null",
+        "[]",
+        '{"extra_fields": null}',
+        '{"extra_fields": []}',
+        None,
+        {"extra_fields": None},
+    ],
 )
 def test_post_extra_fields_survives_null_metadata(metadata: Any) -> None:
     patched: list[dict[str, Any]] = []

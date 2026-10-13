@@ -14,6 +14,7 @@ from tests.conftest import FakeEndpoint, FakeResponse, write_csv
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_importer(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -30,9 +31,13 @@ def _make_importer(
     files_base_dir: str | Path | None = None,
 ) -> exp_module.ExperimentsImporter:
     """Create an ExperimentsImporter backed by a temporary CSV and fake endpoint."""
-    _post = post or (lambda **kw: FakeResponse(headers={"Location": "http://x/experiments/99"}))
+    _post = post or (
+        lambda **kw: FakeResponse(headers={"Location": "http://x/experiments/99"})
+    )
     _patch = patch or (lambda **kw: FakeResponse())
-    _get = get or (lambda **kw: FakeResponse(json_data={"metadata": {"extra_fields": {}}}))
+    _get = get or (
+        lambda **kw: FakeResponse(json_data={"metadata": {"extra_fields": {}}})
+    )
     _delete = delete or (lambda **kw: FakeResponse())
 
     monkeypatch.setattr(
@@ -54,6 +59,7 @@ def _make_importer(
 # ---------------------------------------------------------------------------
 # create_new
 # ---------------------------------------------------------------------------
+
 
 def test_create_new_with_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     def fake_post(**kwargs: Any) -> FakeResponse:
@@ -97,20 +103,27 @@ def test_create_new_with_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     assert called["extra"] == 1
 
 
-def test_create_new_with_single_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_create_new_with_single_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """When the path column points to a file, attach_files is called."""
     single_file = tmp_path / "report.pdf"
     single_file.write_text("data", encoding="utf-8")
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "attachments"],
         [["t", str(single_file)]],
     )
 
     called = {"attach": 0}
 
-    monkeypatch.setattr(importer, "attach_files", lambda *a, **kw: called.__setitem__("attach", called["attach"] + 1))
+    monkeypatch.setattr(
+        importer,
+        "attach_files",
+        lambda *a, **kw: called.__setitem__("attach", called["attach"] + 1),
+    )
     monkeypatch.setattr(importer, "post_extra_fields_from_row", lambda *a, **kw: None)
 
     importer.create_new(importer.basic_df.iloc[0])
@@ -121,13 +134,16 @@ def test_create_new_with_single_file(monkeypatch: pytest.MonkeyPatch, tmp_path: 
 def test_create_new_no_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """When no path column is present, no file attachment methods are called."""
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["experiment1"]],
     )
 
     called = {"attach": 0}
-    monkeypatch.setattr(importer, "attach_files", lambda *a, **kw: called.__setitem__("attach", 1))
+    monkeypatch.setattr(
+        importer, "attach_files", lambda *a, **kw: called.__setitem__("attach", 1)
+    )
     monkeypatch.setattr(importer, "post_extra_fields_from_row", lambda *a, **kw: None)
 
     eid = importer.create_new(importer.basic_df.iloc[0])
@@ -136,7 +152,9 @@ def test_create_new_no_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     assert called["attach"] == 0
 
 
-def test_create_new_with_category(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_create_new_with_category(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """create_new patches category when default_category or CSV category is set."""
     patched_data: list[dict] = []
 
@@ -145,7 +163,8 @@ def test_create_new_with_category(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
         return FakeResponse()
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["t"]],
         patch=fake_patch,
@@ -160,7 +179,9 @@ def test_create_new_with_category(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     assert category_patches[0]["category"] == "7"
 
 
-def test_create_new_with_template(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_create_new_with_template(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """create_new includes the template in the POST payload."""
     posted_data: list[dict] = []
 
@@ -169,7 +190,8 @@ def test_create_new_with_template(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
         return FakeResponse(headers={"Location": "http://x/experiments/50"})
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["t"]],
         post=fake_post,
@@ -188,12 +210,15 @@ def test_create_new_with_tags(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     tag_calls: list[list[str]] = []
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "tags"],
         [["t", "alpha,beta"]],
     )
     monkeypatch.setattr(importer, "post_extra_fields_from_row", lambda *a, **kw: None)
-    monkeypatch.setattr(importer, "replace_tags", lambda rid, tags: tag_calls.append(tags))
+    monkeypatch.setattr(
+        importer, "replace_tags", lambda rid, tags: tag_calls.append(tags)
+    )
 
     importer.create_new(importer.basic_df.iloc[0])
 
@@ -210,7 +235,8 @@ def test_create_new_with_body(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
         return FakeResponse(headers={"Location": "http://x/experiments/1"})
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "body"],
         [["t", "<p>hello</p>"]],
         post=fake_post,
@@ -222,14 +248,21 @@ def test_create_new_with_body(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     assert any(d.get("body") == "<p>hello</p>" for d in posted)
 
 
-def test_create_new_post_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_create_new_post_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """create_new raises RuntimeError when the initial POST fails."""
+
     def fail_post(**kwargs: Any) -> FakeResponse:
-        return FakeResponse(status_code=500, text="Internal Server Error",
-                            headers={"Location": "http://x/experiments/0"})
+        return FakeResponse(
+            status_code=500,
+            text="Internal Server Error",
+            headers={"Location": "http://x/experiments/0"},
+        )
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["t"]],
         post=fail_post,
@@ -242,6 +275,7 @@ def test_create_new_post_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 # ---------------------------------------------------------------------------
 # patch_existing
 # ---------------------------------------------------------------------------
+
 
 def test_patch_existing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     captured: dict[str, dict[str, Any]] = {"data": {}}
@@ -292,11 +326,14 @@ def test_patch_existing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
 def test_patch_existing_id_column_not_written_as_extra_field(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """The 'Experiment ID' column only locates the entry; it must not become an extra field."""
+    """The 'Experiment ID' column only locates the entry, not an extra field."""
+
     def fake_get(**kwargs: Any) -> FakeResponse:
         return FakeResponse(
             json_data={
-                "metadata": {"extra_fields": {"Custom Field": {"type": "text", "value": ""}}}
+                "metadata": {
+                    "extra_fields": {"Custom Field": {"type": "text", "value": ""}}
+                }
             }
         )
 
@@ -328,20 +365,27 @@ def test_patch_existing_id_column_not_written_as_extra_field(
     assert "Custom Field" in last
 
 
-def test_patch_existing_with_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_patch_existing_with_files(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """patch_existing attaches files when a path column points to a directory."""
     files_dir = tmp_path / "files"
     files_dir.mkdir()
     (files_dir / "data.csv").write_text("a,b", encoding="utf-8")
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "attachments"],
         [["t", str(files_dir)]],
     )
 
     called = {"attach": 0}
-    monkeypatch.setattr(importer, "attach_files", lambda *a, **kw: called.__setitem__("attach", called["attach"] + 1))
+    monkeypatch.setattr(
+        importer,
+        "attach_files",
+        lambda *a, **kw: called.__setitem__("attach", called["attach"] + 1),
+    )
     monkeypatch.setattr(importer, "post_extra_fields_from_row", lambda *a, **kw: None)
 
     importer.patch_existing("1", importer.basic_df.iloc[0])
@@ -349,19 +393,26 @@ def test_patch_existing_with_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     assert called["attach"] == 1
 
 
-def test_patch_existing_with_single_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_patch_existing_with_single_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """patch_existing calls attach_files when path points to a file."""
     single_file = tmp_path / "report.pdf"
     single_file.write_text("data", encoding="utf-8")
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "attachments"],
         [["t", str(single_file)]],
     )
 
     called = {"attach": 0}
-    monkeypatch.setattr(importer, "attach_files", lambda *a, **kw: called.__setitem__("attach", called["attach"] + 1))
+    monkeypatch.setattr(
+        importer,
+        "attach_files",
+        lambda *a, **kw: called.__setitem__("attach", called["attach"] + 1),
+    )
     monkeypatch.setattr(importer, "post_extra_fields_from_row", lambda *a, **kw: None)
 
     importer.patch_existing("1", importer.basic_df.iloc[0])
@@ -375,7 +426,9 @@ def test_patch_existing_does_not_resend_metadata(
     """The entry PATCH carries no metadata — it is written separately by
     post_extra_fields_from_row, so existing fields cannot be clobbered and the
     request stays small. String-stored metadata must not break this path."""
-    metadata_str = json.dumps({"extra_fields": {"Field1": {"type": "text", "value": "old"}}})
+    metadata_str = json.dumps(
+        {"extra_fields": {"Field1": {"type": "text", "value": "old"}}}
+    )
 
     def fake_get(**kwargs: Any) -> FakeResponse:
         return FakeResponse(json_data={"metadata": metadata_str})
@@ -387,7 +440,8 @@ def test_patch_existing_does_not_resend_metadata(
         return FakeResponse()
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["t"]],
         get=fake_get,
@@ -402,7 +456,9 @@ def test_patch_existing_does_not_resend_metadata(
     assert captured[0]["title"] == "t"
 
 
-def test_patch_existing_with_date(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_patch_existing_with_date(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """patch_existing includes normalized date in payload."""
     captured: list[dict] = []
 
@@ -411,7 +467,8 @@ def test_patch_existing_with_date(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
         return FakeResponse()
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "date"],
         [["t", "15.03.2024"]],
         patch=fake_patch,
@@ -429,6 +486,7 @@ def test_patch_existing_with_date(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
 # patch_existing – $delete_V and $delete_F
 # ---------------------------------------------------------------------------
 
+
 def test_patch_existing_delete_V_clears_body(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -440,7 +498,8 @@ def test_patch_existing_delete_V_clears_body(
         return FakeResponse()
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "body"],
         [["My Title", "$delete_V"]],
         patch=fake_patch,
@@ -465,7 +524,8 @@ def test_patch_existing_delete_F_removes_body_column(
         return FakeResponse()
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "body"],
         [["My Title", "$delete_F"]],
         patch=fake_patch,
@@ -489,7 +549,8 @@ def test_patch_existing_delete_V_extra_field_is_cleared(
         rows_received.append(row.copy())
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "Custom Field"],
         [["t", "$delete_V"]],
     )
@@ -504,14 +565,15 @@ def test_patch_existing_delete_V_extra_field_is_cleared(
 def test_patch_existing_delete_F_extra_field_not_in_row(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """$delete_F drops the extra field column entirely; post_extra_fields_from_row never sees it."""
+    """$delete_F drops the extra field column; the extra-field step never sees it."""
     rows_received: list[pd.Series] = []
 
     def capturing_extra(eid: Any, row: pd.Series, **kwargs: Any) -> None:
         rows_received.append(row.copy())
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "Custom Field"],
         [["t", "$delete_F"]],
     )
@@ -736,14 +798,14 @@ def test_patch_existing_delete_V_multiple_columns(
         rows_received.append(row.copy())
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "body", "Field A", "Field B"],
         [["t", "$delete_V", "$delete_V", "keep_me"]],
     )
     monkeypatch.setattr(importer, "post_extra_fields_from_row", capturing_extra)
 
     captured: list[dict] = []
-    original_patch = importer.endpoint.patch
 
     def spy_patch(**kwargs: Any) -> FakeResponse:
         captured.append(kwargs.get("data", {}))
@@ -770,7 +832,8 @@ def test_patch_existing_delete_F_multiple_columns(
         rows_received.append(row.copy())
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "Field A", "Field B", "Field C"],
         [["t", "$delete_F", "$delete_F", "keep_me"]],
     )
@@ -794,7 +857,8 @@ def test_patch_existing_delete_V_and_delete_F_combined(
         rows_received.append(row.copy())
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "body", "Field A", "Field B"],
         [["t", "$delete_V", "$delete_F", "keep_me"]],
     )
@@ -830,7 +894,8 @@ def test_patch_existing_delete_V_title_unaffected(
         return FakeResponse()
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "body"],
         [["Real Title", "$delete_V"]],
         patch=fake_patch,
@@ -854,7 +919,8 @@ def test_patch_existing_normal_values_unaffected_by_delete_markers(
         rows_received.append(row.copy())
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "body", "Field A"],
         [["t", "some body text", "normal value"]],
     )
@@ -882,7 +948,8 @@ def test_patch_existing_delete_V_tags_no_new_tags(
     tag_calls: list[list[str]] = []
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "tags"],
         [["t", "$delete_V"]],
     )
@@ -900,11 +967,12 @@ def test_patch_existing_delete_V_tags_no_new_tags(
 def test_patch_existing_delete_F_tags_column_dropped(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """$delete_F on the tags column drops it; append_tags is called with an empty list."""
+    """$delete_F on the tags column drops it; append_tags gets an empty list."""
     tag_calls: list[list[str]] = []
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "tags"],
         [["t", "$delete_F"]],
     )
@@ -954,7 +1022,7 @@ def test_patch_existing_body_appends_to_existing(
 def test_patch_existing_tags_appended_keeping_existing(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """New tags are appended via append_tags; the existing tag string is passed through."""
+    """New tags are appended via append_tags; the existing tags are passed along."""
     calls: list[dict[str, Any]] = []
 
     def fake_get(**kwargs: Any) -> FakeResponse:
@@ -986,7 +1054,7 @@ def test_patch_existing_tags_appended_keeping_existing(
 def test_append_tags_skips_existing_and_posts_new(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """append_tags posts only tags not already present, without clearing existing ones."""
+    """append_tags posts only tags not already present and clears nothing."""
     posted: list[str] = []
     deleted: list[Any] = []
 
@@ -999,8 +1067,12 @@ def test_append_tags_skips_existing_and_posts_new(
         return FakeResponse()
 
     importer = _make_importer(
-        monkeypatch, tmp_path, ["title"], [["t"]],
-        post=fake_post, delete=fake_delete,
+        monkeypatch,
+        tmp_path,
+        ["title"],
+        [["t"]],
+        post=fake_post,
+        delete=fake_delete,
     )
 
     importer.append_tags("1", ["keep", "new1", "new2"], existing_tags="keep|other")
@@ -1019,7 +1091,8 @@ def test_patch_existing_delete_V_does_not_match_partial(
         rows_received.append(row.copy())
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "Field A", "Field B"],
         [["t", "delete_V", " $delete_V "]],
     )
@@ -1043,7 +1116,8 @@ def test_patch_existing_delete_F_does_not_match_partial(
         rows_received.append(row.copy())
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "Field A", "Field B"],
         [["t", "delete_F", " $delete_F "]],
     )
@@ -1059,6 +1133,7 @@ def test_patch_existing_delete_F_does_not_match_partial(
 # ---------------------------------------------------------------------------
 # create_all_from_csv
 # ---------------------------------------------------------------------------
+
 
 def test_create_all_from_csv_new(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -1125,7 +1200,8 @@ def test_create_all_update_no_id_col_raises(
 ) -> None:
     """update_existing with no experiment ID column raises ValueError."""
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["t"]],
         update_existing=True,
@@ -1141,7 +1217,8 @@ def test_create_all_update_skips_on_patch_failure(
 ) -> None:
     """Rows that fail to patch are skipped and counted."""
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["experiment id", "title"],
         [["10", "t1"], ["20", "t2"]],
         update_existing=True,
@@ -1165,7 +1242,8 @@ def test_create_all_from_csv_with_template(
     templates_received: list = []
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["t"]],
     )
@@ -1184,6 +1262,7 @@ def test_create_all_from_csv_with_template(
 # ---------------------------------------------------------------------------
 # post_extra_fields_from_row
 # ---------------------------------------------------------------------------
+
 
 def test_post_extra_fields_from_row(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -1235,7 +1314,8 @@ def test_post_extra_fields_no_matching_fields(
         return FakeResponse()
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["t"]],
         get=fake_get,
@@ -1252,6 +1332,7 @@ def test_post_extra_fields_creates_new_field(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """CSV columns not in elab extra_fields are added as new fields."""
+
     def fake_get(**kwargs: Any) -> FakeResponse:
         return FakeResponse(json_data={"metadata": {"extra_fields": {}}})
 
@@ -1262,7 +1343,8 @@ def test_post_extra_fields_creates_new_field(
         return FakeResponse()
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "Custom Column"],
         [["t", "custom_val"]],
         get=fake_get,
@@ -1337,6 +1419,7 @@ def test_link_type_extra_field_creates_real_link(
 ) -> None:
     """An items/experiments extra field must also POST a real link (like the UI),
     not only set the metadata value — otherwise nothing renders / links."""
+
     def fake_get(**kwargs: Any) -> FakeResponse:
         return FakeResponse(
             json_data={
@@ -1376,6 +1459,7 @@ def test_post_extra_fields_with_links(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Link columns trigger _post_links and are not patched as metadata."""
+
     def fake_get(**kwargs: Any) -> FakeResponse:
         return FakeResponse(json_data={"metadata": {"extra_fields": {}}})
 
@@ -1386,7 +1470,8 @@ def test_post_extra_fields_with_links(
         return FakeResponse()
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "experiments links"],
         [["t", "5, 10"]],
         get=fake_get,
@@ -1409,6 +1494,7 @@ def test_post_extra_fields_with_items_links(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """'resources links' column maps to items_links sub-endpoint."""
+
     def fake_get(**kwargs: Any) -> FakeResponse:
         return FakeResponse(json_data={"metadata": {"extra_fields": {}}})
 
@@ -1419,7 +1505,8 @@ def test_post_extra_fields_with_items_links(
         return FakeResponse()
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "resources links"],
         [["t", "3"]],
         get=fake_get,
@@ -1454,6 +1541,7 @@ def test_link_columns_match_regardless_of_spaces_or_underscores(
     sub_endpoint: str,
 ) -> None:
     """Link headers match with spaces, underscores, or neither (not as extra fields)."""
+
     def fake_get(**kwargs: Any) -> FakeResponse:
         return FakeResponse(json_data={"metadata": {"extra_fields": {}}})
 
@@ -1471,7 +1559,8 @@ def test_link_columns_match_regardless_of_spaces_or_underscores(
         return FakeResponse()
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", header],
         [["t", "5,6"]],
         get=fake_get,
@@ -1493,7 +1582,9 @@ def test_post_extra_fields_string_metadata(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Metadata stored as JSON string is correctly parsed."""
-    metadata_str = json.dumps({"extra_fields": {"My Field": {"type": "text", "value": ""}}})
+    metadata_str = json.dumps(
+        {"extra_fields": {"My Field": {"type": "text", "value": ""}}}
+    )
 
     def fake_get(**kwargs: Any) -> FakeResponse:
         return FakeResponse(json_data={"metadata": metadata_str})
@@ -1505,7 +1596,8 @@ def test_post_extra_fields_string_metadata(
         return FakeResponse()
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "my field"],
         [["t", "updated_val"]],
         get=fake_get,
@@ -1524,6 +1616,7 @@ def test_post_extra_fields_patch_failure(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """RuntimeError is raised when patch fails."""
+
     def fake_get(**kwargs: Any) -> FakeResponse:
         return FakeResponse(json_data={"metadata": {"extra_fields": {}}})
 
@@ -1531,7 +1624,8 @@ def test_post_extra_fields_patch_failure(
         return FakeResponse(status_code=500, text="Server Error")
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "Custom Col"],
         [["t", "val"]],
         get=fake_get,
@@ -1547,8 +1641,11 @@ def test_post_extra_fields_patch_failure(
 # attach_files
 # ---------------------------------------------------------------------------
 
-def test_attach_files_single_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """attach_files with a single file delegates to attach_single_file (files[] format)."""
+
+def test_attach_files_single_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """attach_files with one file delegates to attach_single_file (files[])."""
     posted: list[dict] = []
 
     def fake_post(**kwargs: Any) -> FakeResponse:
@@ -1556,7 +1653,8 @@ def test_attach_files_single_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
         return FakeResponse()
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["t"]],
         post=fake_post,
@@ -1573,10 +1671,13 @@ def test_attach_files_single_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     assert posted[0]["files"][0][0] == "files[]"
 
 
-def test_attach_files_invalid_id(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_attach_files_invalid_id(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Non-numeric ID raises ValueError."""
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["t"]],
     )
@@ -1591,7 +1692,8 @@ def test_attach_files_invalid_id(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 def test_attach_files_not_found(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Missing path raises FileNotFoundError."""
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["t"]],
     )
@@ -1600,13 +1702,17 @@ def test_attach_files_not_found(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
         importer.attach_files(1, tmp_path / "nonexistent.txt")
 
 
-def test_attach_files_single_file_failure_raises(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_attach_files_single_file_failure_raises(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Upload failure for a single file raises after both format attempts fail."""
+
     def fail_post(**kwargs: Any) -> FakeResponse:
         return FakeResponse(status_code=500, text="Server Error")
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["t"]],
         post=fail_post,
@@ -1615,11 +1721,13 @@ def test_attach_files_single_file_failure_raises(monkeypatch: pytest.MonkeyPatch
     f = tmp_path / "doc.txt"
     f.write_text("hello", encoding="utf-8")
 
-    with pytest.raises(Exception):
+    with pytest.raises(RuntimeError, match="500"):
         importer.attach_files(1, f)
 
 
-def test_attach_files_uploads_each_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_attach_files_uploads_each_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Each file in the directory is uploaded individually."""
     posted: list[dict] = []
 
@@ -1628,7 +1736,8 @@ def test_attach_files_uploads_each_file(monkeypatch: pytest.MonkeyPatch, tmp_pat
         return FakeResponse()
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["t"]],
         post=fake_post,
@@ -1646,8 +1755,10 @@ def test_attach_files_uploads_each_file(monkeypatch: pytest.MonkeyPatch, tmp_pat
     assert all(p["sub_endpoint_name"] == "uploads" for p in posted)
 
 
-def test_attach_files_partial_failure_continues(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """When one file's first attempt fails, the fallback is tried and remaining files continue."""
+def test_attach_files_partial_failure_continues(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """If one file's first attempt fails, the fallback is tried and the rest go on."""
     call_count = {"n": 0}
 
     def fake_post(**kwargs: Any) -> FakeResponse:
@@ -1657,7 +1768,8 @@ def test_attach_files_partial_failure_continues(monkeypatch: pytest.MonkeyPatch,
         return FakeResponse()
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["t"]],
         post=fake_post,
@@ -1685,7 +1797,8 @@ def test_attach_files_empty_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
         return FakeResponse()
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["t"]],
         post=fake_post,
@@ -1702,6 +1815,7 @@ def test_attach_files_empty_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
 # ---------------------------------------------------------------------------
 # _split_multi
 # ---------------------------------------------------------------------------
+
 
 def test_split_multi_comma() -> None:
     assert exp_module.ExperimentsImporter._split_multi("a, b, c") == ["a", "b", "c"]
@@ -1731,6 +1845,7 @@ def test_split_multi_whitespace_only() -> None:
 # ---------------------------------------------------------------------------
 # _parse_link_ids
 # ---------------------------------------------------------------------------
+
 
 def test_parse_link_ids_basic() -> None:
     assert exp_module.ExperimentsImporter._parse_link_ids("1, 2, 3") == [1, 2, 3]
@@ -1776,6 +1891,7 @@ def test_parse_link_ids_semicolons() -> None:
 # _coerce_for_field
 # ---------------------------------------------------------------------------
 
+
 def test_coerce_select_field() -> None:
     defn = {"type": "select", "allow_multi_values": True, "options": ["A", "B"]}
     coerced = exp_module.ExperimentsImporter._coerce_for_field(defn, "a, B")
@@ -1816,9 +1932,7 @@ def test_coerce_link_field_to_id_string(field_type: str) -> None:
 @pytest.mark.parametrize("raw", ["22576.5", "not-an-id", -1, float("nan")])
 def test_coerce_link_field_rejects_invalid_id(raw: Any) -> None:
     assert (
-        exp_module.ExperimentsImporter._coerce_for_field(
-            {"type": "experiments"}, raw
-        )
+        exp_module.ExperimentsImporter._coerce_for_field({"type": "experiments"}, raw)
         is None
     )
 
@@ -1847,9 +1961,13 @@ def test_coerce_multi_select_no_duplicates() -> None:
 # _collect_csv_extra_fields
 # ---------------------------------------------------------------------------
 
-def test_collect_csv_extra_fields(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+
+def test_collect_csv_extra_fields(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "Custom Col", "Another"],
         [["t", "val1", "val2"]],
     )
@@ -1862,9 +1980,12 @@ def test_collect_csv_extra_fields(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     assert values == {"val1", "val2"}
 
 
-def test_collect_csv_extra_fields_skips_nan(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_collect_csv_extra_fields_skips_nan(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "Custom Col"],
         [["t", ""]],
     )
@@ -1876,10 +1997,13 @@ def test_collect_csv_extra_fields_skips_nan(monkeypatch: pytest.MonkeyPatch, tmp
     assert len(extras) == 0
 
 
-def test_collect_csv_extra_fields_skips_known(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_collect_csv_extra_fields_skips_known(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Known post fields are excluded from extras."""
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "tags", "Custom"],
         [["t", "a", "v"]],
     )
@@ -1896,9 +2020,11 @@ def test_collect_csv_extra_fields_skips_known(monkeypatch: pytest.MonkeyPatch, t
 # _find_experiment_id_col
 # ---------------------------------------------------------------------------
 
+
 def test_find_experiment_id_col(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["Experiment ID", "title"],
         [["1", "t"]],
         update_existing=True,
@@ -1907,9 +2033,12 @@ def test_find_experiment_id_col(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     assert importer._experiment_id_col == "Experiment ID"
 
 
-def test_find_experiment_id_col_missing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_find_experiment_id_col_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "body"],
         [["t", "b"]],
     )
@@ -1921,58 +2050,86 @@ def test_find_experiment_id_col_missing(monkeypatch: pytest.MonkeyPatch, tmp_pat
 # _parse_entity_id (experiment context)
 # ---------------------------------------------------------------------------
 
-def test_parse_experiment_id_valid(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+
+def test_parse_experiment_id_valid(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["experiment id", "title"],
         [["42", "t"]],
         update_existing=True,
     )
 
     row = importer.basic_df.iloc[0]
-    assert importer._parse_entity_id(importer._experiment_id_col, row, 0, "Experiment") == "42"
+    assert (
+        importer._parse_entity_id(importer._experiment_id_col, row, 0, "Experiment")
+        == "42"
+    )
 
 
-def test_parse_experiment_id_float(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_parse_experiment_id_float(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["experiment id", "title"],
         [["42.0", "t"]],
         update_existing=True,
     )
 
     row = importer.basic_df.iloc[0]
-    assert importer._parse_entity_id(importer._experiment_id_col, row, 0, "Experiment") == "42"
+    assert (
+        importer._parse_entity_id(importer._experiment_id_col, row, 0, "Experiment")
+        == "42"
+    )
 
 
-def test_parse_experiment_id_invalid(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_parse_experiment_id_invalid(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["experiment id", "title"],
         [["abc", "t"]],
         update_existing=True,
     )
 
     row = importer.basic_df.iloc[0]
-    assert importer._parse_entity_id(importer._experiment_id_col, row, 0, "Experiment") is None
+    assert (
+        importer._parse_entity_id(importer._experiment_id_col, row, 0, "Experiment")
+        is None
+    )
 
 
-def test_parse_experiment_id_empty(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_parse_experiment_id_empty(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["experiment id", "title"],
         [["", "t"]],
         update_existing=True,
     )
 
     row = importer.basic_df.iloc[0]
-    assert importer._parse_entity_id(importer._experiment_id_col, row, 0, "Experiment") is None
+    assert (
+        importer._parse_entity_id(importer._experiment_id_col, row, 0, "Experiment")
+        is None
+    )
 
 
-def test_parse_experiment_id_no_col(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_parse_experiment_id_no_col(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """When id_col is None, returns None."""
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["t"]],
     )
@@ -1985,11 +2142,13 @@ def test_parse_experiment_id_no_col(monkeypatch: pytest.MonkeyPatch, tmp_path: P
 # _extract_known_post_fields
 # ---------------------------------------------------------------------------
 
+
 def test_extract_known_post_fields_with_template(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "body"],
         [["t", "b"]],
         template_id=10,
@@ -2006,7 +2165,8 @@ def test_extract_known_post_fields_override_template(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "body"],
         [["t", "b"]],
         template_id=10,
@@ -2022,7 +2182,8 @@ def test_extract_known_post_fields_no_body(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["t"]],
     )
@@ -2038,9 +2199,13 @@ def test_extract_known_post_fields_no_body(
 # Constructor / properties
 # ---------------------------------------------------------------------------
 
-def test_constructor_with_category(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+
+def test_constructor_with_category(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["t"]],
         category_id="5",
@@ -2049,19 +2214,25 @@ def test_constructor_with_category(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     assert importer._default_category == "5"
 
 
-def test_constructor_invalid_category_raises(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_constructor_invalid_category_raises(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     with pytest.raises(ValueError, match="numeric"):
         _make_importer(
-            monkeypatch, tmp_path,
+            monkeypatch,
+            tmp_path,
             ["title"],
             [["t"]],
             category_id="abc",
         )
 
 
-def test_constructor_with_files_base_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_constructor_with_files_base_dir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["t"]],
         files_base_dir=str(tmp_path),
@@ -2072,7 +2243,8 @@ def test_constructor_with_files_base_dir(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
 def test_properties(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["t"]],
     )
@@ -2088,7 +2260,8 @@ def test_properties(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
 def test_counters_increment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """new_count increments after create_new calls."""
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["t1"], ["t2"]],
     )
@@ -2104,10 +2277,12 @@ def test_counters_increment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
 # Column normalization (NBSP, tabs)
 # ---------------------------------------------------------------------------
 
+
 def test_column_nbsp_normalized(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """NBSP characters in column names are replaced with spaces."""
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "extra\u00a0field"],
         [["t", "v"]],
     )
@@ -2119,7 +2294,8 @@ def test_column_nbsp_normalized(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
 def test_column_tab_normalized(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Tab characters in column names are replaced with spaces."""
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title", "extra\tfield"],
         [["t", "v"]],
     )
@@ -2131,6 +2307,7 @@ def test_column_tab_normalized(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
 # _post_links
 # ---------------------------------------------------------------------------
 
+
 def test_post_links_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     posted: list[dict] = []
 
@@ -2139,7 +2316,8 @@ def test_post_links_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
         return FakeResponse()
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["t"]],
         post=fake_post,
@@ -2152,13 +2330,17 @@ def test_post_links_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
     assert posted[1]["sub_endpoint_id"] == 10
 
 
-def test_post_links_failure_logged(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_post_links_failure_logged(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Link creation failures are logged but don't raise."""
+
     def fail_post(**kwargs: Any) -> FakeResponse:
         return FakeResponse(status_code=500, text="Error")
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         ["title"],
         [["t"]],
         post=fail_post,
@@ -2171,6 +2353,7 @@ def test_post_links_failure_logged(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
 # ---------------------------------------------------------------------------
 # Permissions (canread / canwrite)
 # ---------------------------------------------------------------------------
+
 
 def _permission_importer(
     monkeypatch: pytest.MonkeyPatch,
@@ -2193,8 +2376,12 @@ def _permission_importer(
         return FakeResponse()
 
     importer = _make_importer(
-        monkeypatch, tmp_path, headers, [values],
-        get=fake_get, patch=fake_patch,
+        monkeypatch,
+        tmp_path,
+        headers,
+        [values],
+        get=fake_get,
+        patch=fake_patch,
     )
     monkeypatch.setattr(importer, "append_tags", lambda *a, **kw: None)
     return importer
@@ -2224,8 +2411,10 @@ def test_permission_base_accepts_words_and_numbers(
 ) -> None:
     captured: list[dict] = []
     importer = _permission_importer(
-        monkeypatch, tmp_path,
-        ["title", "canread_base", "canwrite_base"], ["t", "team", "20"],
+        monkeypatch,
+        tmp_path,
+        ["title", "canread_base", "canwrite_base"],
+        ["t", "team", "20"],
         captured,
     )
 
@@ -2242,8 +2431,10 @@ def test_permission_columns_are_not_extra_fields(
     """Permission columns must never land in metadata.extra_fields."""
     captured: list[dict] = []
     importer = _permission_importer(
-        monkeypatch, tmp_path,
-        ["title", "canread_base", "canread_users"], ["t", "30", "42"],
+        monkeypatch,
+        tmp_path,
+        ["title", "canread_base", "canread_users"],
+        ["t", "30", "42"],
         captured,
     )
 
@@ -2273,8 +2464,10 @@ def test_empty_permission_cells_change_nothing(
 ) -> None:
     captured: list[dict] = []
     importer = _permission_importer(
-        monkeypatch, tmp_path,
-        ["title", "canread_base", "canread_users"], ["t", "", ""],
+        monkeypatch,
+        tmp_path,
+        ["title", "canread_base", "canread_users"],
+        ["t", "", ""],
         captured,
     )
 
@@ -2295,8 +2488,10 @@ def test_permissions_applied_on_create(
         return FakeResponse(headers={"Location": "http://x/experiments/7"})
 
     importer = _make_importer(
-        monkeypatch, tmp_path,
-        ["title", "canread_base", "canread_users"], [["t", "40", "1,2"]],
+        monkeypatch,
+        tmp_path,
+        ["title", "canread_base", "canread_users"],
+        [["t", "40", "1,2"]],
         post=fake_post,
     )
     monkeypatch.setattr(importer, "post_extra_fields_from_row", lambda *a, **kw: None)
@@ -2436,12 +2631,11 @@ def test_create_skips_row_with_invalid_select_value(
 # Regression: bug fixes
 # ---------------------------------------------------------------------------
 
+
 def test_create_mode_failed_row_does_not_abort_import(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    importer = _make_importer(
-        monkeypatch, tmp_path, ["title"], [["a"], ["b"], ["c"]]
-    )
+    importer = _make_importer(monkeypatch, tmp_path, ["title"], [["a"], ["b"], ["c"]])
 
     def fake_create(row: Any, template: Any = None) -> str:
         if row["title"] == "b":
@@ -2460,7 +2654,10 @@ def test_parse_entity_id_rejects_fractional_ids(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     importer = _make_importer(
-        monkeypatch, tmp_path, ["experiment id", "title"], [["12.7", "t"]],
+        monkeypatch,
+        tmp_path,
+        ["experiment id", "title"],
+        [["12.7", "t"]],
         update_existing=True,
     )
     row = importer.basic_df.iloc[0]
@@ -2500,7 +2697,10 @@ def test_get_existing_json_ignores_error_bodies(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, status: int
 ) -> None:
     importer = _make_importer(
-        monkeypatch, tmp_path, ["title"], [["t"]],
+        monkeypatch,
+        tmp_path,
+        ["title"],
+        [["t"]],
         get=lambda **kw: FakeResponse(status, json_data={"message": "Not Found"}),
     )
 
@@ -2512,7 +2712,9 @@ def test_update_does_not_touch_an_entry_it_cannot_read(
 ) -> None:
     patches: list[Any] = []
     importer = _make_importer(
-        monkeypatch, tmp_path, ["experiment id", "title", "body"],
+        monkeypatch,
+        tmp_path,
+        ["experiment id", "title", "body"],
         [[7, "new title", "appended text"]],
         get=lambda **kw: FakeResponse(500, json_data={"message": "server error"}),
         patch=lambda **kw: patches.append(kw) or FakeResponse(),

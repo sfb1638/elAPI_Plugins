@@ -52,11 +52,21 @@ PERMISSION_LIST_KEYS: tuple[str, ...] = ("users", "teams", "teamgroups")
 # Accepted spellings for the base level. eLabFTW uses 10/20/30/40/50; the words
 # are offered because the numbers are not self-explanatory.
 PERMISSION_BASE_LEVELS: dict[str, int] = {
-    "10": 10, "owner": 10, "owneronly": 10,
-    "20": 20, "admins": 20, "owneradmins": 20,
-    "30": 30, "team": 30, "teammembers": 30,
-    "40": 40, "everyone": 40, "allaccounts": 40,
-    "50": 50, "public": 50, "anonymous": 50,
+    "10": 10,
+    "owner": 10,
+    "owneronly": 10,
+    "20": 20,
+    "admins": 20,
+    "owneradmins": 20,
+    "30": 30,
+    "team": 30,
+    "teammembers": 30,
+    "40": 40,
+    "everyone": 40,
+    "allaccounts": 40,
+    "50": 50,
+    "public": 50,
+    "anonymous": 50,
 }
 
 
@@ -196,7 +206,7 @@ class BaseImporter(ABC):
         target = canonicalize(name)
         if target in self.cols_canon:
             return self.cols_canon[target]
-        for canon_col, original in self.cols_canon.items():
+        for original in self.cols_canon.values():
             tokens = {canonicalize(t) for t in re.split(r"[^0-9A-Za-z]+", original) if t}
             if target in tokens:
                 return original
@@ -229,7 +239,7 @@ class BaseImporter(ABC):
         )
 
     def _find_entity_id_col(self, keyword: str) -> str | None:
-        """Return the column name whose canonical form matches or contains ``keyword``."""
+        """Return the column whose canonical form matches or contains ``keyword``."""
         for canon, original in self.cols_canon.items():
             c = canon.replace("_", "")
             if c == keyword or keyword in c:
@@ -530,7 +540,7 @@ class BaseImporter(ABC):
         return {canonicalize(col)} if col else set()
 
     def get_category_id(self, row: pd.Series) -> str | None:
-        """Return normalized numeric category id from row or None; raises on non-numeric."""
+        """Return the numeric category id of a row, or None; raise if non-numeric."""
         if row is None or not isinstance(row, pd.Series):
             return None
         col = self.resolve_category_col()
@@ -1167,9 +1177,7 @@ class BaseImporter(ABC):
                 t.strip() for t in str(existing_tags).split("|") if t.strip()
             }
 
-        normalized = [
-            t for t in self._normalize_tags(tags) if t not in already_present
-        ]
+        normalized = [t for t in self._normalize_tags(tags) if t not in already_present]
         if not normalized:
             return
 
@@ -1181,9 +1189,7 @@ class BaseImporter(ABC):
             )
             resp.raise_for_status()
 
-    def _post_links(
-        self, entity_id: str, link_ops: list[tuple[str, list[int]]]
-    ) -> None:
+    def _post_links(self, entity_id: str, link_ops: list[tuple[str, list[int]]]) -> None:
         """Create links via sub-endpoints (experiments_links/items_links).
 
         eLabFTW's ``POST /{entity}/{id}/{..._links}/{subid}`` requires an
@@ -1226,13 +1232,13 @@ class BaseImporter(ABC):
 
     @classmethod
     def _extract_rename_map(cls, row: pd.Series) -> dict[str, str]:
-        """Map columns whose cell is a '$rename->New Name' marker to the new field name."""
+        """Map columns whose cell is a '$rename$New Name' marker to the new name."""
         rename_map: dict[str, str] = {}
         for col, val in row.items():
             if not isinstance(col, str) or not isinstance(val, str):
                 continue
             if val.startswith(cls._RENAME_PREFIX):
-                new_name = val[len(cls._RENAME_PREFIX):].strip()
+                new_name = val[len(cls._RENAME_PREFIX) :].strip()
                 if new_name:
                     rename_map[col] = new_name
         return rename_map
@@ -1258,9 +1264,7 @@ class BaseImporter(ABC):
             except Exception:
                 raw_metadata = {}
         # "null", a list or a number is valid JSON but not usable metadata.
-        metadata: dict[str, Any] = (
-            raw_metadata if isinstance(raw_metadata, dict) else {}
-        )
+        metadata: dict[str, Any] = raw_metadata if isinstance(raw_metadata, dict) else {}
 
         elab_extra_fields = metadata.get("extra_fields")
         if elab_extra_fields is None or elab_extra_fields == []:
@@ -1334,8 +1338,7 @@ class BaseImporter(ABC):
                 continue
             new_canon = canonicalize(new_name)
             collision = any(
-                canonicalize(k) == new_canon and k != real_key
-                for k in elab_extra_fields
+                canonicalize(k) == new_canon and k != real_key for k in elab_extra_fields
             )
             if collision:
                 logger.warning(
@@ -1428,9 +1431,7 @@ class BaseImporter(ABC):
                 logger.info("No matching extra fields to upload for entry %s.", eid)
             return
 
-        logger.debug(
-            "Patching extra fields for entry %s: %s", eid, list(changed.keys())
-        )
+        logger.debug("Patching extra fields for entry %s: %s", eid, list(changed.keys()))
 
         metadata_str = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
         payload = {"metadata": metadata_str}
@@ -1456,7 +1457,7 @@ class BaseImporter(ABC):
 
     # region --- Entry creation ---
 
-    def _increment_new_counter(self) -> None:
+    def _increment_new_counter(self) -> None:  # noqa: B027  (optional hook)
         """Increment the new-entry counter. Override in subclasses."""
 
     def create_new(self, row: pd.Series, template: int | str | None = None) -> str:
