@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   skipped row with the reason, and the log keeps the full list. Only a "not
   found" answer counts as missing, so a network or permission error never skips
   a row. Update markers (`$delete_V`, `$delete_F`, `$rename$`) are exempt.
+- **Attachments folder.** The import form has an optional "Attachments folder"
+  field. Relative paths in the `files_path` / `attachments` columns are resolved
+  against it, or against the CSV's own folder when the CSV is given by path.
 
 ### Changed
 
@@ -28,6 +31,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   warning; the row is now skipped.
 - In update mode the success message reads "skipped N" instead of
   "skipped N invalid IDs", as rows can now be skipped for other reasons.
+- Creating entries no longer stops at the first row that fails: the row is
+  reported as skipped and the import goes on. Re-running a half-finished import
+  no longer duplicates the rows that were already created.
+- Tags in one cell may mix `;`, `,` and `|` as separators.
+- A column such as `Body Weight` is no longer taken for the body when the
+  template defines a field of that name.
+- The app logs to a per-user folder in packaged builds and reports its real
+  version, so the "Update available" banner no longer shows permanently.
+
+### Fixed
+
+- **Create mode** now applies the `date` column (and a numeric `status`); for
+  resources both used to be stored as extra fields.
+- `category_id` and `Category-ID` are recognised as the category column, and the
+  category column is no longer also written as an extra field. A category like
+  `12.0` is accepted, and a bad one skips only its row in update mode.
+- An entry that cannot be read (404, server error) is no longer updated; before,
+  its error reply was taken for the entry and the body was overwritten instead
+  of appended to.
+- Entity IDs with decimals (`12.7`) are rejected instead of being cut to `12`.
+- Entries whose `metadata` is `null` or malformed no longer crash the update.
+- CSV files keep non-ASCII characters (`Müller`) that appear after an
+  ASCII-only start; undecodable bytes are replaced and logged, not dropped.
+- HTML bodies are exported in full, not just the text inside paragraphs.
+- Missing release fields in the update banner no longer show as "None".
+- A page reload no longer shuts the app down; the shutdown is delayed and
+  cancelled by the next request.
+- The local server rejects cross-site requests and foreign `Host` headers.
+- The API token file `~/.config/elapi.yml` is written readable by its owner only.
+- Uploaded CSVs and exported spreadsheets are deleted after use, and two uploads
+  with the same name no longer overwrite each other.
+- Loading a page no longer hangs forever when the server keeps timing out.
+- The `LOG_LEVEL` environment variable is honoured by the GUI.
+- The permission columns in the importer configs match the code
+  (`canread_users`, `*_teamgroups`), and the experiments importer reads its own
+  config file.
+
+### Removed
+
+- Unused code: `IDValidator`, `_attach_files`, `patch_decoded_extra_fields`,
+  `download_asset`, `config/misc_config.json` and a few unused attributes.
 
 ## [1.3.0b1] — 2026-08-28
 

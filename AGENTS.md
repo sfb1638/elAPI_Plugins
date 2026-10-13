@@ -259,6 +259,18 @@ resources importers. `TemplatesImporter` is **not** validated.
   `/items_types` are resource *templates*. A wrong endpoint would 404 and skip
   every row, so confirm the target instance before adding such a check.
 
+## Import failure handling
+
+- Create mode: a row whose request fails is logged, recorded in `skipped_rows`
+  (reason `Import failed: ...`) and counted as skipped; the run goes on.
+- Update mode: `_require_existing_json` refuses to update an entry it cannot
+  read (404, 5xx) — the body is appended to the existing one, so without it the
+  update would overwrite the body.
+- A column counts as the body only if it is `body`, or a whole-word match
+  ("Body Text") that is not a field of the entry/template (`_body_column`).
+- `date` and a numeric `status` are applied in create mode too
+  (`_entry_meta_payload`); templates have neither.
+
 ## Conventions
 
 - Match the existing style: type hints, `logging` (module-level `logger`),
@@ -272,6 +284,6 @@ resources importers. `TemplatesImporter` is **not** validated.
 
 ## Known test state
 
-A few tests fail on the base branch independently of recent changes (e.g.
-`test_create_new_with_files`, `test_get_tags_parsing`). Verify new failures
-against a clean checkout (`git stash`) before assuming your change caused them.
+The whole suite passes, and `ruff check .` and `mypy src gui` are clean. Treat
+any failure as caused by your change; compare with a clean checkout
+(`git stash`) if in doubt.
