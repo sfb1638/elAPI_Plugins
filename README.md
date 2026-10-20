@@ -1,6 +1,7 @@
 # elAPI Plugins
 
 <p align="center">
+  <a href="https://github.com/sfb1638/elAPI_Plugins/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/sfb1638/elAPI_Plugins/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="License" src="https://img.shields.io/github/license/sfb1638/elAPI_Plugins">
   <img alt="Version" src="https://img.shields.io/badge/dynamic/toml?url=https://raw.githubusercontent.com/sfb1638/elAPI_Plugins/main/pyproject.toml&query=$.project.version&label=version&prefix=v&color=green">
   <img alt="Python" src="https://img.shields.io/badge/dynamic/toml?url=https://raw.githubusercontent.com/sfb1638/elAPI_Plugins/main/pyproject.toml&query=$.project['requires-python']&label=python&color=blue">
@@ -159,7 +160,7 @@ Every run also measures **test coverage** (with branch tracking, configured unde
 pytest --cov-fail-under=80
 ```
 
-(Use it on the full suite only; a run of a single test file covers little by design.) For a browsable report, run `pytest --cov-report=html` and open `htmlcov/index.html`.
+(Use it on the full suite only; a run of a single test file covers little by design.) The same checks — lint, type check, tests and the 80% coverage limit — run on GitHub for every push and pull request (see the **Actions** tab); the coverage table is on each run's summary page. For a browsable report, run `pytest --cov-report=html` and open `htmlcov/index.html`.
 
 ### Use with Jupyter
 
