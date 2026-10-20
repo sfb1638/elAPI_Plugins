@@ -386,3 +386,18 @@ def test_post_extra_fields_leaves_unexpected_extra_fields_alone() -> None:
     imp.post_extra_fields_from_row("5", pd.Series({"Genotype": "wt"}))
 
     assert patched == []
+
+
+def test_template_lookup_survives_elapi_exiting(monkeypatch: pytest.MonkeyPatch) -> None:
+    """elapi calls sys.exit() when its config is unusable; that must not end the app."""
+    from src.services.importers import base_importer
+
+    def exit_like_elapi(name: str) -> None:
+        raise SystemExit(1)
+
+    monkeypatch.setattr(base_importer, "get_fixed", exit_like_elapi)
+    imp = DummyImporter(pd.DataFrame({"title": ["x"]}))
+    imp._TEMPLATE_ENDPOINT = "experiments_templates"
+
+    assert imp._field_defs_for(None, 5) == {}  # field checks are skipped
+    assert imp._entity_exists("items_links", 7) is None  # "could not tell"

@@ -7,12 +7,30 @@ from typing import Any
 import pandas as pd
 import pytest
 
+from src.services.importers import base_importer
 from src.services.importers import experiments_importer as exp_module
 from tests.conftest import FakeEndpoint, FakeResponse, write_csv
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def no_real_elapi(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the base importer's own template and link lookups off the real client.
+
+    The real elapi client needs saved eLabFTW settings and exits without them
+    (it did on a fresh Windows machine). A test that sets up its own fake simply
+    patches ``base_importer.get_fixed`` again and wins.
+    """
+    monkeypatch.setattr(
+        base_importer,
+        "get_fixed",
+        lambda name: FakeEndpoint(
+            get=FakeResponse(json_data={"metadata": {"extra_fields": {}}})
+        ),
+    )
 
 
 def _make_importer(

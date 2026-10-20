@@ -708,7 +708,7 @@ class BaseImporter(ABC):
                 logger.warning(
                     "Could not verify %s %s: HTTP %s.", label.lower(), entity_id, status
                 )
-        except Exception as exc:
+        except (SystemExit, Exception) as exc:  # elapi exits on a bad config
             logger.warning("Could not verify %s %s: %s", label.lower(), entity_id, exc)
 
         self._exists_cache[key] = result
@@ -778,7 +778,7 @@ class BaseImporter(ABC):
                 payload = response.json()
                 if isinstance(payload, dict):
                     defs = self._field_defs_from_json(payload)
-            except Exception as exc:
+            except (SystemExit, Exception) as exc:  # elapi exits on a bad config
                 logger.warning(
                     "Could not read template %s; skipping field checks: %s",
                     template_id,

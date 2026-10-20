@@ -92,7 +92,8 @@ def test_base_importer_get_elab_id_and_validate_category() -> None:
 def test_base_importer_resolve_folder_with_base_dir() -> None:
     importer = DummyImporter(pd.DataFrame([{"files_path": "folder/file.txt"}]))
     resolved = importer._resolve_folder("folder/file.txt")
-    assert resolved == Path("/base/folder/file.txt")
+    # resolve() adds a drive letter on Windows, so build the expectation the same way
+    assert resolved == (Path("/base") / "folder" / "file.txt").resolve()
 
 
 def test_resources_importer_create_new(
