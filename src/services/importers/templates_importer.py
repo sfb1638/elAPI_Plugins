@@ -246,8 +246,7 @@ class TemplatesImporter(BaseImporter):
                 )
 
         known |= {
-            canonicalize_field(col)
-            for col in self.find_permission_columns(row).values()
+            canonicalize_field(col) for col in self.find_permission_columns(row).values()
         }
         known |= self._category_known_columns()
         if body_col:
@@ -304,6 +303,9 @@ class TemplatesImporter(BaseImporter):
             )
 
             if not template_row_id:
+                self._record_unusable_id(
+                    idx, row, self._template_row_id_col, self._label
+                )
                 self._skipped_templates_counter += 1
                 continue
 
@@ -322,6 +324,7 @@ class TemplatesImporter(BaseImporter):
                     title,
                     exc,
                 )
+                self._record_failed_update(idx, template_row_id, exc)
                 self._skipped_templates_counter += 1
         return ids
 

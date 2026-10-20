@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import atexit
 import csv
+import shutil
 import sys
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -13,6 +16,16 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
+
+# Send the logs of a test run to a temporary folder, so the tests never write into
+# the real logs/ (app.log, error.log, skipped_rows.log). This has to happen here,
+# before any test module imports code that sets up logging.
+_TEST_LOG_DIR = Path(tempfile.mkdtemp(prefix="elapi-plugins-test-logs-"))
+atexit.register(shutil.rmtree, _TEST_LOG_DIR, ignore_errors=True)
+
+from src.utils import logging_config  # noqa: E402
+
+logging_config.log_dir = lambda: _TEST_LOG_DIR
 
 
 class FakeResponse:

@@ -4,6 +4,9 @@
   "formatters": {
     "standard": {
       "format": "%(asctime)s | %(levelname)s | %(name)s | %(filename)s:%(lineno)d | %(message)s"
+    },
+    "skipped": {
+      "format": "%(asctime)s | %(message)s"
     }
   },
   "handlers": {
@@ -28,6 +31,14 @@
       "backupCount": 3,
       "encoding": "utf-8",
       "level": "ERROR"
+    },
+    "file_skipped": {
+      "class": "logging.handlers.RotatingFileHandler",
+      "formatter": "skipped",
+      "filename": "skipped_rows.log",
+      "maxBytes": 2000000,
+      "backupCount": 3,
+      "encoding": "utf-8"
     }
   },
   "root": {
@@ -42,6 +53,11 @@
     "urllib3": {
       "level": "WARNING",
       "propagate": true
+    },
+    "elapi_plugins.skipped": {
+      "level": "INFO",
+      "handlers": ["file_skipped"],
+      "propagate": false
     },
     "src.services.importers": {
       "level": "INFO",

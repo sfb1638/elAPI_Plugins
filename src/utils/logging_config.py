@@ -3,9 +3,21 @@ from __future__ import annotations
 import logging
 import logging.config
 import os
+from pathlib import Path
 
 from src.utils.common import load_config
 from src.utils.paths import LOGGING_CONFIG, log_dir
+
+# Rows an import leaves out are written to a log file of their own (see
+# config/logging_config.json), so the full list can be read without searching
+# the application log.
+SKIPPED_LOGGER = "elapi_plugins.skipped"
+SKIPPED_LOG_FILE = "skipped_rows.log"
+
+
+def skipped_log_path() -> Path:
+    """Where the log of skipped rows is written."""
+    return log_dir() / SKIPPED_LOG_FILE
 
 
 def _coerce_level(level: str | int | None) -> str | int | None:

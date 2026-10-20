@@ -196,7 +196,11 @@
     {% if messages %}
     <ul class="flashes">
         {% for category, msg in messages %}
+        {% if msg is mapping %}
+        <li class="{{ category }}">{{ msg.text }}<br><a class="flash-link" href="{{ msg.link }}" target="_blank" rel="noopener">{{ msg.link_text }}</a></li>
+        {% else %}
         <li class="{{ category }}">{{ msg }}</li>
+        {% endif %}
         {% endfor %}
     </ul>
     {% endif %}

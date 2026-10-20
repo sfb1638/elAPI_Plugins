@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
-from src.utils.logging_config import _coerce_level, setup_logging
+from src.utils.logging_config import (
+    SKIPPED_LOG_FILE,
+    SKIPPED_LOGGER,
+    _coerce_level,
+    setup_logging,
+)
 
 
 def test_coerce_level_handles_strings_and_ints() -> None:
@@ -40,3 +46,31 @@ def test_log_dir_is_per_user_when_packaged(
 
     assert paths.log_dir() == tmp_path / "elAPI_Plugins" / "logs"
     assert paths.BASE_DIR not in paths.log_dir().parents
+
+
+@pytest.fixture
+def restore_logging() -> Iterator[None]:
+    yield
+    setup_logging(level="INFO", force=True)  # back to the real log folder
+
+
+def test_skipped_rows_have_their_own_log_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, restore_logging: None
+) -> None:
+    from src.utils import logging_config
+
+    monkeypatch.setattr(logging_config, "log_dir", lambda: tmp_path)
+    setup_logging(level="INFO", force=True)
+
+    logging.getLogger(SKIPPED_LOGGER).warning("Row 4: something is wrong")
+    logging.getLogger("some.other.module").warning("an ordinary warning")
+    for handler in logging.getLogger(SKIPPED_LOGGER).handlers:
+        handler.flush()
+    for handler in logging.getLogger().handlers:
+        handler.flush()
+
+    skipped = (tmp_path / SKIPPED_LOG_FILE).read_text(encoding="utf-8")
+    assert "Row 4: something is wrong" in skipped
+    assert "an ordinary warning" not in skipped  # only skipped rows go there
+    assert "Row 4" not in (tmp_path / "app.log").read_text(encoding="utf-8")
+    assert logging_config.skipped_log_path() == tmp_path / SKIPPED_LOG_FILE

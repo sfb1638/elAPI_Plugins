@@ -398,17 +398,15 @@ def _skipped(n: int) -> list[Any]:
 
 def test_format_skipped_rows_lists_rows_and_reasons() -> None:
     text = gui._format_skipped_rows(_skipped(1))
-    assert text == (
-        "Skipped 1 row with invalid values:\nRow 1: Experiment 100 does not exist"
-    )
+    assert text == "Skipped 1 row:\nRow 1: Experiment 100 does not exist"
 
 
 def test_format_skipped_rows_caps_the_list() -> None:
     text = gui._format_skipped_rows(_skipped(13))
     lines = text.splitlines()
-    assert lines[0] == "Skipped 13 rows with invalid values:"
+    assert lines[0] == "Skipped 13 rows:"
     assert len(lines) == 1 + gui.MAX_SKIPPED_ROWS_SHOWN + 1
-    assert lines[-1] == "...and 3 more (see app.log)."
+    assert lines[-1] == "...and 3 more."
 
 
 def test_import_flashes_warning_for_skipped_rows(
@@ -447,8 +445,10 @@ def test_import_flashes_warning_for_skipped_rows(
     with client.session_transaction() as sess:
         flashes = dict((cat, msg) for cat, msg in sess["_flashes"])
     assert flashes["success"].startswith("Imported 1 experiments")
-    assert flashes["warning"].startswith("Skipped 2 rows with invalid values:")
-    assert "Row 2: Experiment 200 does not exist" in flashes["warning"]
+    warning = flashes["warning"]
+    assert warning["text"].startswith("Skipped 2 rows:")
+    assert "Row 2: Experiment 200 does not exist" in warning["text"]
+    assert warning["link"] == "/logs/skipped-rows"
 
 
 def test_cross_site_post_is_rejected() -> None:
@@ -721,3 +721,114 @@ def test_quit_is_refused_for_cross_site_requests() -> None:
     )
 
     assert resp.status_code == 403
+
+
+def test_skipped_log_page_shows_the_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    log = tmp_path / "skipped_rows.log"
+    log.write_text("=== import ===\nRow 3: Müller is not valid\n", encoding="utf-8")
+    monkeypatch.setattr(gui, "skipped_log_path", lambda: log)
+    gui.app.testing = True
+
+    resp = gui.app.test_client().get("/logs/skipped-rows")
+
+    assert resp.status_code == 200
+    assert resp.mimetype == "text/plain"
+    assert "charset=utf-8" in resp.headers["Content-Type"]
+    assert "Row 3: Müller is not valid" in resp.get_data(as_text=True)
+
+
+def test_skipped_log_page_without_a_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(gui, "skipped_log_path", lambda: tmp_path / "missing.log")
+    gui.app.testing = True
+
+    resp = gui.app.test_client().get("/logs/skipped-rows")
+
+    assert resp.status_code == 200
+    assert "No rows have been skipped yet" in resp.get_data(as_text=True)
+
+
+def test_warning_shows_a_link_to_the_log_and_escapes_the_text(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The link is rendered as a link; CSV text inside the message is not."""
+    from src.services.importers.base_importer import SkippedRow
+
+    monkeypatch.setattr(
+        gui.endpoints,
+        "get_fixed",
+        lambda name: FakeEndpoint(get=lambda **kw: FakeResponse(json_data={"data": []})),
+    )
+    monkeypatch.setattr(gui, "paged_fetch", lambda *args, **kwargs: [])
+
+    class DummyImporter:
+        skipped_rows = [SkippedRow(1, ("'<script>alert(1)</script>' is not valid",))]
+        log_context = ""
+
+        def create_all_from_csv(self) -> list[str]:
+            return []
+
+    monkeypatch.setattr(
+        gui.ImporterFactory, "get_importer", lambda *a, **kw: DummyImporter()
+    )
+    csv_path = write_csv(tmp_path / "imp.csv", ["title"], [["t"]])
+    gui.app.testing = True
+
+    resp = gui.app.test_client().post(
+        "/",
+        data={
+            "export_type": "imports",
+            "category": "1",
+            "import_path": str(csv_path),
+            "import_target": "experiments",
+        },
+        follow_redirects=True,
+    )
+
+    html = resp.get_data(as_text=True)
+    assert 'href="/logs/skipped-rows"' in html
+    assert "Open the full log of skipped rows" in html
+    assert "<script>alert(1)</script>" not in html
+    assert "&lt;script&gt;" in html
+
+
+def test_import_names_itself_in_the_skipped_log_header(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        gui.endpoints,
+        "get_fixed",
+        lambda name: FakeEndpoint(get=lambda **kw: FakeResponse(json_data={"data": []})),
+    )
+    monkeypatch.setattr(gui, "paged_fetch", lambda *args, **kwargs: [])
+    seen: dict[str, str] = {}
+
+    class DummyImporter:
+        skipped_rows: list[Any] = []
+
+        def create_all_from_csv(self) -> list[str]:
+            return []
+
+    importer = DummyImporter()
+    monkeypatch.setattr(gui.ImporterFactory, "get_importer", lambda *a, **kw: importer)
+    csv_path = write_csv(tmp_path / "samples.csv", ["title"], [["t"]])
+    gui.app.testing = True
+
+    gui.app.test_client().post(
+        "/",
+        data={
+            "export_type": "imports",
+            "category": "1",
+            "import_path": str(csv_path),
+            "import_target": "resources",
+            "update_existing": "yes",
+        },
+    )
+
+    seen["context"] = importer.log_context  # type: ignore[attr-defined]
+    assert "resources import of" in seen["context"]
+    assert "samples.csv" in seen["context"]
+    assert "update mode" in seen["context"]

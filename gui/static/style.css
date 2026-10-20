@@ -553,6 +553,13 @@ button:focus-visible {
     white-space: pre-line;
 }
 
+.flashes .flash-link {
+    display: inline-block;
+    margin-top: 0.5rem;
+    color: inherit;
+    text-decoration: underline;
+}
+
 .flashes .error {
     border-color: rgba(239, 68, 68, 0.25);
     background: linear-gradient(180deg, rgba(239, 68, 68, 0.08), transparent);

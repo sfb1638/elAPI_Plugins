@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -2873,3 +2875,124 @@ def test_create_new_adds_nothing_when_the_permissions_are_rejected(
         importer.create_new(importer.basic_df.iloc[0])
 
     assert events == ["post:create", "patch:body,canread_base"]
+
+
+# ---------------------------------------------------------------------------
+# The log of skipped rows
+# ---------------------------------------------------------------------------
+
+
+class _Collect(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__()
+        self.lines: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.lines.append(record.getMessage())
+
+
+@pytest.fixture
+def skipped_lines() -> Iterator[list[str]]:
+    """Everything written to the skipped-rows logger during the test."""
+    handler = _Collect()
+    skipped = logging.getLogger("elapi_plugins.skipped")
+    skipped.addHandler(handler)
+    try:
+        yield handler.lines
+    finally:
+        skipped.removeHandler(handler)
+
+
+def test_skipped_rows_are_written_to_their_own_log(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, skipped_lines: list[str]
+) -> None:
+    importer = _make_importer(monkeypatch, tmp_path, ["title"], [["a"], ["b"], ["c"]])
+    importer.log_context = "experiments import of data.csv (create mode)"
+
+    def fake_create(row: Any, template: Any = None) -> str:
+        if row["title"] in {"a", "c"}:
+            raise RuntimeError("boom")
+        return "1"
+
+    monkeypatch.setattr(importer, "create_new", fake_create)
+
+    importer.create_all_from_csv()
+
+    # one header for the run, then one line per skipped row, in CSV order
+    assert skipped_lines == [
+        "=== experiments import of data.csv (create mode) ===",
+        "Row 1: Import failed: boom",
+        "Row 3: Import failed: boom",
+    ]
+
+
+def test_clean_import_writes_nothing_to_the_skipped_log(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, skipped_lines: list[str]
+) -> None:
+    importer = _make_importer(monkeypatch, tmp_path, ["title"], [["a"]])
+    monkeypatch.setattr(importer, "create_new", lambda row, template=None: "1")
+
+    importer.create_all_from_csv()
+
+    assert skipped_lines == []
+
+
+def test_update_rows_with_unusable_ids_are_listed_and_logged(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, skipped_lines: list[str]
+) -> None:
+    importer = _make_importer(
+        monkeypatch,
+        tmp_path,
+        ["experiment id", "title"],
+        [["", "no id"], ["abc", "bad id"], ["7", "fine"]],
+        update_existing=True,
+    )
+    monkeypatch.setattr(importer, "patch_existing", lambda **kw: 200)
+
+    assert importer.create_all_from_csv() == ["7"]
+
+    assert [(s.row_number, s.reasons) for s in importer.skipped_rows] == [
+        (1, ("Experiment ID is missing",)),
+        (2, ("'abc' is not a valid Experiment ID",)),
+    ]
+    assert importer.skipped_count == 2
+    assert "Row 1: Experiment ID is missing" in skipped_lines
+    assert "Row 2: 'abc' is not a valid Experiment ID" in skipped_lines
+
+
+def test_failed_updates_are_listed_and_logged_with_the_entry_id(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, skipped_lines: list[str]
+) -> None:
+    importer = _make_importer(
+        monkeypatch,
+        tmp_path,
+        ["experiment id", "title"],
+        [["12", "t"]],
+        update_existing=True,
+    )
+
+    def fail(**kwargs: Any) -> int:
+        raise RuntimeError("server said no")
+
+    monkeypatch.setattr(importer, "patch_existing", fail)
+
+    importer.create_all_from_csv()
+
+    assert importer.skipped_rows[0].reasons == ("Update failed: server said no",)
+    assert "Row 1 (ID 12): Update failed: server said no" in skipped_lines
+
+
+def test_creation_failure_names_the_title_of_the_row(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The skipped-rows log is read by people, so it must say which row failed."""
+    importer = _make_importer(
+        monkeypatch,
+        tmp_path,
+        ["title"],
+        [["Sample A"]],
+        post=lambda **kw: FakeResponse(status_code=500, text="Server Error"),
+    )
+
+    with pytest.raises(RuntimeError, match="'Sample A'"):
+        importer.create_new(importer.basic_df.iloc[0])

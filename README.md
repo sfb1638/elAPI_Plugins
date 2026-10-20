@@ -316,6 +316,7 @@ Good to know:
 - Not checked: whether a category ID exists, number/date/other field types, tags, permission IDs and file paths (a missing file path is logged and the row is still imported).
 - Resource and experiment imports are validated; template imports are not.
 - A row that passes the checks but then fails in eLabFTW while a new entry is created (for example a server error) is reported as skipped too, with the reason `Import failed`; the import carries on with the next row. Rows created before it stay in eLabFTW, so after a partial import, import only the skipped rows again.
+- Every skipped row is also written to its own file, `skipped_rows.log`, and the warning ends with a link, **Open the full log of skipped rows**, that shows it. Each import adds a header with the file name and the mode, then one line per row. The file is in the `logs` folder of the project, or, for an installed app, in `~/.local/state/elAPI_Plugins/logs` (Linux), `~/Library/Logs/elAPI_Plugins` (macOS) or `%LOCALAPPDATA%\elAPI_Plugins\logs` (Windows). Old entries rotate away once the file reaches about 2 MB.
 
 ---
 

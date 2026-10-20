@@ -53,7 +53,7 @@ from src.factories import ExporterFactory, ImporterFactory
 from src.updater.updater import check_for_update, get_current_version
 from src.utils import endpoints, instance
 from src.utils.common import paged_fetch
-from src.utils.logging_config import setup_logging
+from src.utils.logging_config import setup_logging, skipped_log_path
 
 HOST = "127.0.0.1"
 PORT = 1991
@@ -95,12 +95,12 @@ MAX_SKIPPED_ROWS_SHOWN = 10
 def _format_skipped_rows(skipped_rows: list[Any]) -> str:
     """Build the warning text listing rows the importer left out and why."""
     noun = "row" if len(skipped_rows) == 1 else "rows"
-    lines = [f"Skipped {len(skipped_rows)} {noun} with invalid values:"]
+    lines = [f"Skipped {len(skipped_rows)} {noun}:"]
     for skipped in skipped_rows[:MAX_SKIPPED_ROWS_SHOWN]:
         lines.append(f"Row {skipped.row_number}: {'; '.join(skipped.reasons)}")
     hidden = len(skipped_rows) - MAX_SKIPPED_ROWS_SHOWN
     if hidden > 0:
-        lines.append(f"...and {hidden} more (see app.log).")
+        lines.append(f"...and {hidden} more.")
     return "\n".join(lines)
 
 
@@ -523,6 +523,11 @@ def index() -> str | WerkzeugResponse:
                 os.path.dirname(source) if import_path else None
             )
 
+            log_context = (
+                f"{import_target} import of {source_label} "
+                f"({'update' if update_existing else 'create'} mode)"
+            )
+
             try:
                 if import_target == "resources":
                     importer = ImporterFactory.get_importer(
@@ -533,6 +538,7 @@ def index() -> str | WerkzeugResponse:
                         category_id=import_cid if update_existing else None,
                         update_existing=update_existing,
                     )
+                    importer.log_context = log_context
                     ids = importer.create_all_from_csv()
                     count = len(ids)
                 elif import_target == "experiments":
@@ -545,6 +551,7 @@ def index() -> str | WerkzeugResponse:
                         template_id=exp_template_id if not update_existing else None,
                         update_existing=update_existing,
                     )
+                    importer.log_context = log_context
                     ids = importer.create_all_from_csv()
                     count = len(ids)
                 elif import_target in ("resource_templates", "experiment_templates"):
@@ -555,6 +562,7 @@ def index() -> str | WerkzeugResponse:
                         csv_path=source,
                         update_existing=update_existing,
                     )
+                    importer.log_context = log_context
                     ids = importer.create_all_from_csv()
                     count = len(ids)
                 else:
@@ -577,7 +585,16 @@ def index() -> str | WerkzeugResponse:
 
                 skipped_rows = getattr(importer, "skipped_rows", [])
                 if skipped_rows:
-                    flash(_format_skipped_rows(skipped_rows), "warning")
+                    # Flask keeps any JSON value in the session; the template shows
+                    # a {text, link, link_text} message as text plus a link.
+                    flash(
+                        {  # type: ignore[arg-type]
+                            "text": _format_skipped_rows(skipped_rows),
+                            "link": url_for("skipped_log"),
+                            "link_text": "Open the full log of skipped rows",
+                        },
+                        "warning",
+                    )
 
             except Exception as e:
                 flash(f"Import failed: {e}", "error")
@@ -611,6 +628,23 @@ def shutdown() -> tuple[str, int]:
             _shutdown_timer.daemon = True
             _shutdown_timer.start()
     return "Shutting down", 200
+
+
+@app.route("/logs/skipped-rows")
+def skipped_log() -> Response:
+    """Show the log of skipped rows as plain text (a file:// link would be blocked)."""
+    path = skipped_log_path()
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        text = ""
+    response = Response(
+        text if text.strip() else "No rows have been skipped yet.",
+        mimetype="text/plain",
+    )
+    response.headers["Content-Type"] = "text/plain; charset=utf-8"
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.route("/ping")

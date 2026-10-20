@@ -276,6 +276,7 @@ class ExperimentsImporter(BaseImporter):
             )
 
             if not experiment_id:
+                self._record_unusable_id(idx, row, self._experiment_id_col, "Experiment")
                 self._skipped_experiments_counter += 1
                 continue
 
@@ -299,6 +300,7 @@ class ExperimentsImporter(BaseImporter):
                     title,
                     exc,
                 )
+                self._record_failed_update(idx, experiment_id, exc)
                 self._skipped_experiments_counter += 1
         return ids
 

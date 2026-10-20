@@ -21,6 +21,11 @@ validation, an attachments-folder field for imports, and a long list of fixes.
   skipped row with the reason, and the log keeps the full list. Only a "not
   found" answer counts as missing, so a network or permission error never skips
   a row. Update markers (`$delete_V`, `$delete_F`, `$rename$`) are exempt.
+- **A log of skipped rows.** Every row an import leaves out is written to its own
+  file, `skipped_rows.log`, with a header naming the file and the mode, and the
+  warning in the GUI ends with a link that shows it. Rows skipped because their ID
+  is missing or invalid, or because the update failed, are now listed too; before
+  they were only counted. A failed creation names the title of the row.
 - **Attachments folder.** The import form has an optional "Attachments folder"
   field. Relative paths in the `files_path` / `attachments` columns are resolved
   against it, or against the CSV's own folder when the CSV is given by path.

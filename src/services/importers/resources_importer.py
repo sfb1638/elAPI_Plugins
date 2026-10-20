@@ -277,6 +277,7 @@ class ResourcesImporter(BaseImporter):
             )
 
             if not resource_id:
+                self._record_unusable_id(idx, row, self._resource_id_col, "Resource")
                 self._skipped_resources_counter += 1
                 continue
 
@@ -298,6 +299,7 @@ class ResourcesImporter(BaseImporter):
                     title,
                     exc,
                 )
+                self._record_failed_update(idx, resource_id, exc)
                 self._skipped_resources_counter += 1
         return ids
 

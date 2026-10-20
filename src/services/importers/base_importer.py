@@ -21,6 +21,7 @@ from elapi.api import FixedEndpoint
 
 from src.utils.common import canonicalize, ensure_series
 from src.utils.endpoints import get_fixed
+from src.utils.logging_config import SKIPPED_LOGGER
 from src.utils.paths import RES_IMPORTER_CONFIG
 
 try:
@@ -36,6 +37,7 @@ except json.JSONDecodeError as exc:
     raise ValueError(f"Error decoding JSON from {RES_IMPORTER_CONFIG}: {exc}") from exc
 
 logger = logging.getLogger(__name__)
+skipped_logger = logging.getLogger(SKIPPED_LOGGER)
 
 
 def link_key(name: str) -> str:
@@ -126,6 +128,10 @@ class BaseImporter(ABC):
     # (link sub-endpoint, id) -> exists? Filled lazily by _entity_exists.
     _exists_cache: dict[tuple[str, int], bool | None] | None = None
     _skipped_rows: list[SkippedRow] | None = None
+    # What the header of this import's entries in the skipped-rows log says
+    # (set by the caller, e.g. the file name); written once, before the first row.
+    log_context: str = ""
+    _skip_header_written: bool = False
     # Endpoint holding the template a new entry is created from, so its extra
     # fields can be checked up front; None disables the check.
     _TEMPLATE_ENDPOINT: str | None = None
@@ -917,8 +923,37 @@ class BaseImporter(ABC):
         reasons = tuple(issue.reason for issue in issues)
         row_number = int(row_index) + 1
         logger.warning("Skipping row %d: %s", row_number, "; ".join(reasons))
-        self.skipped_rows.append(SkippedRow(row_number, reasons))
+        self._record_skipped(row_index, reasons, entity_id)
         return True
+
+    def _record_skipped(
+        self, row_index: Any, reasons: tuple[str, ...], entity_id: str | None = None
+    ) -> None:
+        """Remember a row the import left out (GUI list and skipped-rows log)."""
+        row_number = int(row_index) + 1
+        self.skipped_rows.append(SkippedRow(row_number, reasons))
+        if not self._skip_header_written:
+            self._skip_header_written = True
+            skipped_logger.info("=== %s ===", self.log_context or type(self).__name__)
+        where = f"Row {row_number}" + (f" (ID {entity_id})" if entity_id else "")
+        skipped_logger.warning("%s: %s", where, "; ".join(reasons))
+
+    def _record_unusable_id(
+        self, row_index: Any, row: pd.Series, id_col: str | None, label: str
+    ) -> None:
+        """A row of an update import is left out because its ID column is unusable."""
+        raw = row[id_col] if id_col is not None and id_col in row else None
+        if self.normalize_id(raw) is None:
+            reason = f"{label} ID is missing"
+        else:
+            reason = f"{raw!r} is not a valid {label} ID"
+        self._record_skipped(row_index, (reason,))
+
+    def _record_failed_update(
+        self, row_index: Any, entity_id: str, exc: Exception
+    ) -> None:
+        """An update of an existing entry failed, so its row was left out."""
+        self._record_skipped(row_index, (f"Update failed: {exc}",), entity_id)
 
     def _record_failed_row(self, row_index: Any, exc: Exception) -> None:
         """Log a row whose create/patch raised and report it like a skipped row.
@@ -926,9 +961,8 @@ class BaseImporter(ABC):
         One bad row must not abort the run: rows already created stay in
         eLabFTW, and re-running the whole CSV would duplicate them.
         """
-        row_number = int(row_index) + 1
-        logger.error("Row %d failed: %s", row_number, exc)
-        self.skipped_rows.append(SkippedRow(row_number, (f"Import failed: {exc}",)))
+        logger.error("Row %d failed: %s", int(row_index) + 1, exc)
+        self._record_skipped(row_index, (f"Import failed: {exc}",))
 
     # endregion
 
@@ -1482,9 +1516,9 @@ class BaseImporter(ABC):
         try:
             response.raise_for_status()
         except Exception as exc:
-            title = payload.get("title", "<unknown title>")
+            label = self._get_title(row) or "<untitled>"
             raise RuntimeError(
-                f"Creation of {title!r} failed with status "
+                f"Creation of {label!r} failed with status "
                 f"{response.status_code}: {response.text}"
             ) from exc
 

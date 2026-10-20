@@ -251,7 +251,14 @@ resources importers. `TemplatesImporter` is **not** validated.
 - `RowIssue` = one bad cell; `SkippedRow(row_number, reasons)` = one skipped row.
   Row numbers are the Nth data row (header excluded), like `_parse_entity_id`.
 - The GUI (`gui/gui.py::_format_skipped_rows`) flashes the list as a `warning`
-  after the import, capped at `MAX_SKIPPED_ROWS_SHOWN`; the rest is in `app.log`.
+  after the import, capped at `MAX_SKIPPED_ROWS_SHOWN`, with a link to
+  `/logs/skipped-rows`. Every skipped row is also written to
+  `skipped_rows.log` through the logger `elapi_plugins.skipped` (own handler in
+  `config/logging_config.json`, not propagated to `app.log`). All skip sites go
+  through `BaseImporter._record_skipped`: validation, a failed create
+  (`_record_failed_row`), and in update mode an unusable ID
+  (`_record_unusable_id`) or a failed update (`_record_failed_update`). The GUI
+  sets `importer.log_context` (file name, target, mode) for the log header.
 - **Why category existence isn't checked:** the endpoint depends on the eLabFTW
   version. In current API v2, experiment categories live at
   `/teams/{id}/experiments_categories/{subid}` and resource categories at
