@@ -98,7 +98,7 @@ PYI_ARGS+=(--add-data "pyproject.toml:.")
 # Build the .app
 python -m PyInstaller "${PYI_ARGS[@]}" "$ENTRYPOINT"
 
-echo "✅ App built: dist/${APP_NAME}.app"
+echo "App built: dist/${APP_NAME}.app"
 
 # Optional signing to reduce Gatekeeper prompts
 if command -v codesign >/dev/null 2>&1; then
@@ -124,7 +124,7 @@ if [ -z "$SUPPORTED_VERSIONS_DIR" ]; then
   exit 1
 fi
 
-echo "🔎 Bundled supported versions ($SUPPORTED_VERSIONS_DIR):"
+echo "Bundled supported versions ($SUPPORTED_VERSIONS_DIR):"
 ls -la "$SUPPORTED_VERSIONS_DIR" || true
 
 cd dist
@@ -134,4 +134,4 @@ hdiutil create -volname "$APP_BASE" \
   -srcfolder "${APP_NAME}.app" \
   -ov -format UDZO "$DMG_NAME"
 
-echo "📦 DMG created: $(pwd)/$DMG_NAME"
+echo "DMG created: $(pwd)/$DMG_NAME"

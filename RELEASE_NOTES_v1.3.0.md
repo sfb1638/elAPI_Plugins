@@ -2,7 +2,7 @@
 
 This release lets you set read/write permissions and manage templates straight from a CSV, checks every row before anything is sent to eLabFTW, and fixes a long list of bugs that could lose or misplace data. If you are coming from v1.2.0, everything below is new to you; the permissions and templates features were also in the 1.3.0b1 beta.
 
-## ⚠️ Please read before updating
+## Please read before updating
 
 A few things behave differently from v1.2.0:
 
@@ -12,22 +12,22 @@ A few things behave differently from v1.2.0:
 - **Tags may mix separators.** `a; b, c` is now three tags. A tag that itself contains a comma can no longer be written in a cell that also uses another separator.
 - **The `status` column takes a number.** The numeric eLabFTW status ID is applied; a status *name* is ignored with a warning in the log.
 
-## 🔐 Permissions from the CSV
+## Permissions from the CSV
 
 New columns set who can read and write an entry: `canread_base` / `canwrite_base` (the eLabFTW levels 10–50, or the words `owner`, `admins`, `team`, `everyone`, `public`) together with `canread_users`, `canread_teams` and `canread_teamgroups` (and the `canwrite` counterparts). They work when creating and when updating an entry. Only the lists you fill in are replaced, so granting a user access never drops teams set elsewhere, and an invalid level or a non-numeric ID is skipped with a warning rather than sent.
 
-## 🧩 Import and update templates
+## Import and update templates
 
 Resource templates and experiment templates can now be created and updated from a CSV, using the same engine as entries and keyed on a `Template ID` column when updating. Title, main text, extra fields, tags and permissions all behave as they do for entries, including the `$delete_V`, `$delete_F` and `$rename$` markers — so you can rename or remove a field in a large template without clicking through the interface. Templates have no uploads or links in eLabFTW, so attachment and link columns are ignored with a warning.
 
-## ✨ Also new
+## Also new
 
 - **Row validation.** Before a row is imported its values are checked: link columns and link-type fields must be numeric IDs of entries that exist, select fields must use one of their options, and the category must be a number. The GUI lists each skipped row with the reason, and the log keeps the full list. Only a "not found" answer counts as missing, so a network or permission error never skips a good row. The update markers `$delete_V`, `$delete_F` and `$rename$` are exempt.
 - **Attachments folder.** The import form has a new optional **Attachments folder** field. Relative paths in the `files_path` / `attachments` columns are resolved against it — or against the CSV's own folder when the CSV is given by path. Bare folder names work too. A folder that does not exist is refused before anything is created.
 
 - **Relaunching replaces the running app.** If you start elAPI Plugins while an earlier copy is still open — this version or an older one — the old copy is closed and the new one opens, instead of nothing happening. An import still running in the old copy is stopped. Another program using port 1991 is left alone.
 
-## 🐛 Fixes
+## Fixes
 
 **Import — values and columns**
 
@@ -58,13 +58,13 @@ Resource templates and experiment templates can now be created and updated from 
 - Packaged apps write their logs to a per-user folder (`~/.local/state/elAPI_Plugins/logs` on Linux, `~/Library/Logs/elAPI_Plugins` on macOS, `%LOCALAPPDATA%\elAPI_Plugins\logs` on Windows) and bundle `pyproject.toml`, so they report their real version and the "Update available" banner no longer shows permanently.
 - The Windows build no longer fails at "Creating virtual environment" when `python` resolves to the Microsoft Store alias; it now finds a real interpreter and stops at the first failing step.
 
-## 🔧 Under the hood
+## Under the hood
 
 - The permission columns in the importer configs match the code (`canread_users`, `*_teamgroups`), and the experiments importer reads its own config file.
 - Removed unused code: the `IDValidator` module, unused upload and patch helpers, `download_asset` and `config/misc_config.json`.
 - The full test suite passes, and `ruff` and `mypy` are clean. Type stubs for `requests` and `PyYAML` were added to the development dependencies.
 
-## 📦 Install
+## Install
 
 Download the file for your system from the assets below:
 

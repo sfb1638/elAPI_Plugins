@@ -118,11 +118,11 @@ if [ ! -x "$BIN_PATH" ]; then
   exit 1
 fi
 
-echo "✅ Binary built: ${BIN_PATH}"
+echo "Binary built: ${BIN_PATH}"
 
 # --- .deb packaging -------------------------------------------------------
 if ! command -v fpm >/dev/null 2>&1; then
-  echo "ℹ️  fpm not found — skipping .deb creation."
+  echo "fpm not found — skipping .deb creation."
   echo "   Install it with:"
   echo "     sudo apt install ruby ruby-dev build-essential"
   echo "     sudo gem install --no-document fpm"
@@ -163,5 +163,5 @@ FPM_INPUTS=("${BIN_PATH}=/usr/bin/${BIN_NAME}")
 fpm "${FPM_ARGS[@]}" "${FPM_INPUTS[@]}"
 
 DEB_PATH="dist/${PKG_NAME}_${APP_VERSION}_${DEB_ARCH}.deb"
-echo "📦 Package created: ${DEB_PATH}"
+echo "Package created: ${DEB_PATH}"
 echo "   Install with: sudo apt install ./${DEB_PATH}"
