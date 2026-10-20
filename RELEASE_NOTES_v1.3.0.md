@@ -1,6 +1,6 @@
 # v1.3.0 — Permissions, Templates, Row Validation & Safer Imports
 
-This release lets you set read/write permissions and manage templates straight from a CSV, checks every row before anything is sent to eLabFTW, and fixes a long list of bugs that could lose or misplace data. If you are coming from v1.2.0, everything below is new to you; the first two sections were also in the 1.3.0b1 beta.
+This release lets you set read/write permissions and manage templates straight from a CSV, checks every row before anything is sent to eLabFTW, and fixes a long list of bugs that could lose or misplace data. If you are coming from v1.2.0, everything below is new to you; the permissions and templates features were also in the 1.3.0b1 beta.
 
 ## ⚠️ Please read before updating
 
@@ -62,8 +62,19 @@ Resource templates and experiment templates can now be created and updated from 
 
 - The permission columns in the importer configs match the code (`canread_users`, `*_teamgroups`), and the experiments importer reads its own config file.
 - Removed unused code: the `IDValidator` module, unused upload and patch helpers, `download_asset` and `config/misc_config.json`.
-- The full test suite passes (265 tests), and `ruff` and `mypy` are clean. Type stubs for `requests` and `PyYAML` were added to the development dependencies.
+- The full test suite passes, and `ruff` and `mypy` are clean. Type stubs for `requests` and `PyYAML` were added to the development dependencies.
 
 ## 📦 Install
 
-Download the installer for your system from the assets below, or on Linux `sudo apt install ./elapi-plugins_1.3.0_amd64.deb`.
+Download the file for your system from the assets below:
+
+| System | File |
+|---|---|
+| **Windows** | `elAPI_Plugins_x64_1.3.0_installer.exe` — run it and follow the steps |
+| **macOS, Apple Silicon** | `elAPI_Plugins_arm64.dmg` — drag the app into Applications |
+| **macOS, Intel** | `elAPI_Plugins_x86_64.dmg` — same |
+| **Linux (Debian/Ubuntu)** | `elapi-plugins_1.3.0_amd64.deb` — `sudo apt install ./elapi-plugins_1.3.0_amd64.deb` |
+
+On first launch macOS may block the app: open **System Settings → Privacy & Security** and click **Open Anyway**.
+
+**Updating:** install over your current version. Your eLabFTW connection settings are kept. If an earlier copy is still running, starting the new one closes it.
