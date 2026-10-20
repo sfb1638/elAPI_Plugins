@@ -937,7 +937,13 @@ class BaseImporter(ABC):
     def _extract_known_post_fields(
         self, row: pd.Series, template: int | str | None
     ) -> dict[str, Any]:
-        """Build POST payload from template, body and permissions."""
+        """Build the creation (POST) payload: just the template, if there is one.
+
+        Everything else is set with a PATCH after the entry exists. When the
+        request names a template, eLabFTW copies the template and keeps only the
+        title and metadata of the request, so a body or permissions sent here
+        would be silently dropped.
+        """
         data: dict[str, Any] = {}
 
         effective_template = (
@@ -948,6 +954,14 @@ class BaseImporter(ABC):
         if effective_template is not None:
             data["template"] = effective_template
 
+        return data
+
+    def _extract_entry_fields(
+        self, row: pd.Series, template: int | str | None
+    ) -> dict[str, Any]:
+        """Body, permissions, date and status of a new entry, to PATCH after creation."""
+        data: dict[str, Any] = {}
+
         body_col = self._body_column(self._field_defs_for(None, template))
         if body_col and body_col in row:
             body_val = row[body_col]
@@ -956,7 +970,7 @@ class BaseImporter(ABC):
 
         # A new entry has no existing permissions to merge with.
         data.update(self.build_permission_payload(row))
-
+        data.update(self._entry_meta_payload(row))
         return data
 
     # endregion
@@ -1510,14 +1524,14 @@ class BaseImporter(ABC):
                     f"{getattr(patch_resp, 'text', '')}"
                 ) from exc
 
-        if meta := self._entry_meta_payload(row):
+        if fields := self._extract_entry_fields(row, template):
             patch_resp = None
             try:
-                patch_resp = self.endpoint.patch(endpoint_id=entity_id, data=meta)
+                patch_resp = self.endpoint.patch(endpoint_id=entity_id, data=fields)
                 patch_resp.raise_for_status()
             except Exception as exc:
                 raise RuntimeError(
-                    f"Failed to patch {', '.join(meta)} for entry {entity_id}: "
+                    f"Failed to patch {', '.join(fields)} for entry {entity_id}: "
                     f"{getattr(patch_resp, 'status_code', '?')} "
                     f"{getattr(patch_resp, 'text', '')}"
                 ) from exc

@@ -245,25 +245,25 @@ def test_create_new_with_tags(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
 
 
 def test_create_new_with_body(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """create_new includes body in POST payload."""
-    posted: list[dict] = []
+    """create_new delivers the body with a PATCH after the entry is created."""
+    patched: list[dict] = []
 
-    def fake_post(**kwargs: Any) -> FakeResponse:
-        posted.append(kwargs.get("data", {}))
-        return FakeResponse(headers={"Location": "http://x/experiments/1"})
+    def fake_patch(**kwargs: Any) -> FakeResponse:
+        patched.append(kwargs.get("data", {}))
+        return FakeResponse()
 
     importer = _make_importer(
         monkeypatch,
         tmp_path,
         ["title", "body"],
         [["t", "<p>hello</p>"]],
-        post=fake_post,
+        patch=fake_patch,
     )
     monkeypatch.setattr(importer, "post_extra_fields_from_row", lambda *a, **kw: None)
 
     importer.create_new(importer.basic_df.iloc[0])
 
-    assert any(d.get("body") == "<p>hello</p>" for d in posted)
+    assert any(d.get("body") == "<p>hello</p>" for d in patched)
 
 
 def test_create_new_post_failure(
@@ -2175,8 +2175,10 @@ def test_extract_known_post_fields_with_template(
     row = importer.basic_df.iloc[0]
     data = importer._extract_known_post_fields(row, template=None)
 
-    assert data["template"] == 10
-    assert data["body"] == "b"
+    assert data == {
+        "template": 10
+    }  # the body is PATCHed later, see _extract_entry_fields
+    assert importer._extract_entry_fields(row, template=None) == {"body": "b"}
 
 
 def test_extract_known_post_fields_override_template(
@@ -2209,8 +2211,8 @@ def test_extract_known_post_fields_no_body(
     row = importer.basic_df.iloc[0]
     data = importer._extract_known_post_fields(row, template=None)
 
-    assert "body" not in data
-    assert "template" not in data
+    assert data == {}
+    assert importer._extract_entry_fields(row, template=None) == {}
 
 
 # ---------------------------------------------------------------------------
@@ -2497,13 +2499,18 @@ def test_empty_permission_cells_change_nothing(
 def test_permissions_applied_on_create(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """A new entry gets its permissions in the creation payload."""
+    """A new entry gets its permissions with a PATCH, not in the creation request."""
     posted: list[dict] = []
+    patched: list[dict] = []
 
     def fake_post(**kwargs: Any) -> FakeResponse:
         if not kwargs.get("sub_endpoint_name"):
             posted.append(kwargs.get("data") or {})
         return FakeResponse(headers={"Location": "http://x/experiments/7"})
+
+    def fake_patch(**kwargs: Any) -> FakeResponse:
+        patched.append(kwargs.get("data") or {})
+        return FakeResponse()
 
     importer = _make_importer(
         monkeypatch,
@@ -2511,15 +2518,52 @@ def test_permissions_applied_on_create(
         ["title", "canread_base", "canread_users"],
         [["t", "40", "1,2"]],
         post=fake_post,
+        patch=fake_patch,
     )
     monkeypatch.setattr(importer, "post_extra_fields_from_row", lambda *a, **kw: None)
     monkeypatch.setattr(importer, "replace_tags", lambda *a, **kw: None)
 
     importer.create_new(importer.basic_df.iloc[0])
 
-    assert posted
-    assert posted[0]["canread_base"] == 40
-    assert json.loads(posted[0]["canread"])["users"] == [1, 2]
+    assert posted == [{}]  # eLabFTW would drop permissions sent when a template is used
+    sent = next(d for d in patched if "canread_base" in d)
+    assert sent["canread_base"] == 40
+    assert json.loads(sent["canread"])["users"] == [1, 2]
+
+
+@pytest.mark.parametrize("template_id", [None, 10])
+def test_create_new_sends_html_body_with_a_patch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, template_id: int | None
+) -> None:
+    """With a template eLabFTW ignores the body of the creation request."""
+    posted: list[dict] = []
+    patched: list[dict] = []
+    html = "<h1>Title</h1><p>Some <b>bold</b> text</p><ul><li>one</li></ul>"
+
+    def fake_post(**kwargs: Any) -> FakeResponse:
+        if not kwargs.get("sub_endpoint_name"):
+            posted.append(kwargs.get("data") or {})
+        return FakeResponse(headers={"Location": "http://x/experiments/7"})
+
+    def fake_patch(**kwargs: Any) -> FakeResponse:
+        patched.append(kwargs.get("data") or {})
+        return FakeResponse()
+
+    importer = _make_importer(
+        monkeypatch,
+        tmp_path,
+        ["title", "body"],
+        [["t", html]],
+        post=fake_post,
+        patch=fake_patch,
+        template_id=template_id,
+    )
+    monkeypatch.setattr(importer, "post_extra_fields_from_row", lambda *a, **kw: None)
+
+    importer.create_new(importer.basic_df.iloc[0])
+
+    assert all("body" not in d for d in posted)
+    assert any(d.get("body") == html for d in patched)  # HTML arrives untouched
 
 
 def test_parse_link_ids_tolerates_quoted_cells() -> None:
