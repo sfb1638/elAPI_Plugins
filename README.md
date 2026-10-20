@@ -43,6 +43,7 @@ The project is developed as part of the **INF Project**  of [CRC 1638](https://w
 
 - Create new resources or experiments from CSV files.
 - Update existing entries by providing entity IDs in the CSV.
+- Create and update **resource templates** and **experiment templates** from a CSV — see [Importing templates](#importing-templates).
 - Supported fields per entry:
  
   | Field | Details |
@@ -51,6 +52,8 @@ The project is developed as part of the **INF Project**  of [CRC 1638](https://w
   | Category / template | Numeric category or template ID. |
   | Tags | Via the eLabFTW `/tags` sub-endpoint. |
   | File attachments | Single files or entire directories. |
+  | Status | Numeric eLabFTW status ID. |
+  | Read / write permissions | Who may read and write the entry — see [Permissions](#permissions). |
   | Extra fields | Matched to existing template fields with type coercion. |
   | Entity links | Experiment-to-experiment, experiment-to-resource, resource-to-experiment and resource-to-resource links. |
 
@@ -210,17 +213,36 @@ The importer automatically detects the file's delimiter and encoding. Column nam
 | Column | Purpose |
 |--------|---------|
 | `title` | Entry title |
-| `body` | Main text of the entry — accepts plain text or HTML (rendered as rich text in eLabFTW). Matched flexibly, so `Body Text`, `Main Body`, etc. also work. |
-| `tags` | Comma-, semicolon-, or pipe-separated tags |
+| `body` | Main text of the entry — accepts plain text or HTML (rendered as rich text in eLabFTW). Matched flexibly, so `Body Text`, `Main Body`, etc. also work — unless the template has a field of that name (a field called `Body Weight` stays a normal field). |
+| `tags` | Comma-, semicolon-, or pipe-separated tags; the separators may be mixed in one cell |
 | `category` / `category id` | Numeric category ID |
 | `template` | Numeric template ID (used on creation) |
 | `date` | Entry date (various formats supported) |
-| `experiment id` / `resource id` | Existing entry ID — required for update mode |
-| `attachments` / `files_path` | Path to a file or directory to attach |
+| `status` | Numeric eLabFTW status ID. A status name is ignored (with a warning in the log). |
+| `canread_base` / `canwrite_base` | Who may read / write: `10` or `owner`, `20` or `admins`, `30` or `team`, `40` or `everyone`, `50` or `public` — see [Permissions](#permissions) |
+| `canread_users`, `canread_teams`, `canread_teamgroups` (and the same with `canwrite_`) | Comma-separated numeric IDs |
+| `experiment id` / `resource id` / `template id` | Existing entry (or template) ID — required for update mode |
+| `attachments` / `files_path` | Path to a file or directory to attach. A relative path is resolved against the **Attachments folder** field of the import form. |
 | `experiments links` | Comma-separated experiment IDs to link to |
 | `resources links` / `items links` | Comma-separated resource IDs to link to |
 
 Any additional columns are matched against the extra fields defined in the entry's template and populated accordingly.
+
+### Permissions
+
+The permission columns work when creating and when updating an entry. A `*_base` column sets the general level; the `*_users`, `*_teams` and `*_teamgroups` columns name specific users, teams and team groups by their numeric IDs.
+
+- A list you fill in **replaces** that list on the entry. Lists you leave empty keep their current value, so granting a user access never drops the teams someone set in the eLabFTW interface.
+- An invalid level or a non-numeric ID is skipped with a warning in the log instead of being sent.
+
+### Importing templates
+
+In the **Import** tab, choose **Resource templates** or **Experiment templates** to create or update templates from a CSV. The rules are those of entries, with these differences:
+
+- To update, use a `Template ID` column (instead of `Resource ID` / `Experiment ID`).
+- Title, main text, extra fields, tags, permissions and the [update markers](#update-markers) work as they do for entries — handy for renaming or removing a field in a large template.
+- Templates have no attachments, links, date or status in eLabFTW, so those columns are ignored.
+- [Row validation](#row-validation) does not apply to template imports.
 
 ### Linking entries vs. link-type extra fields
 
@@ -247,7 +269,8 @@ When updating an existing entry, a field that **already has a value** is either 
 
 | Field | On update |
 |-------|-----------|
-| `title`, `date`, `category` | **Overwritten** |
+| `title`, `date`, `category`, `status` | **Overwritten** |
+| Permissions (`canread_*`, `canwrite_*`) | **Replaced** per list — only the lists you fill in; the others keep their value |
 | Extra (template) fields | **Overwritten** |
 | **Main text** (`body`) | **Appended** — new text is added *after* the existing text, separated by a line break |
 | `tags` | **Appended** — new tags are added; duplicates are skipped |
@@ -289,6 +312,7 @@ Good to know:
 - The [update markers](#update-markers) are exempt from the checks.
 - Not checked: whether a category ID exists, number/date/other field types, tags, permission IDs and file paths (a missing file path is logged and the row is still imported).
 - Resource and experiment imports are validated; template imports are not.
+- A row that passes the checks but then fails in eLabFTW while a new entry is created (for example a server error) is reported as skipped too, with the reason `Import failed`; the import carries on with the next row. Rows created before it stay in eLabFTW, so after a partial import, import only the skipped rows again.
 
 ---
 
@@ -310,10 +334,10 @@ elAPI_Plugins/
 ├── src/
 │   ├── factories/           Factory classes for importers and exporters
 │   ├── services/
-│   │   ├── importers/       CSV → eLabFTW import logic (resources, experiments)
+│   │   ├── importers/       CSV → eLabFTW import logic (resources, experiments, templates)
 │   │   └── exporters/       eLabFTW → Excel export logic
-│   ├── updater/             GitHub release checker and asset downloader
-│   └── utils/               CSV parsing, endpoint definitions, logging
+│   ├── updater/             GitHub release checker
+│   └── utils/               CSV parsing, endpoint definitions, logging, replacing a running copy
 ├── gui/
 │   ├── gui.py               Flask-based web GUI entry point
 │   ├── templates/           HTML templates
