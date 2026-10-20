@@ -28,7 +28,7 @@ dependencies = [
     "chardet>=5.2.0",
     "elapi>=2.3.3",
     "openpyxl>=3.0.0",
-    "responses>=0.25.8",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -40,6 +40,7 @@ notebook = [
 test = [
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
+    "responses>=0.25.8",
 ]
 lint = [
     "mypy>=1.19.1",
@@ -71,6 +72,17 @@ package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# -------------------------
+# Dependency check (deptry)
+# -------------------------
+
+[tool.deptry.per_rule_ignores]
+# openpyxl: pandas needs it to write .xlsx, but nothing imports it directly.
+# numpy: comes with pandas. notebook: optional extra for Jupyter use.
+DEP002 = ["openpyxl", "numpy", "notebook"]
+# Both are optional here (the code falls back when they are missing).
+DEP003 = ["packaging", "httpx"]
 
 # -------------------------
 # Pytest & coverage
