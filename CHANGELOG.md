@@ -44,6 +44,11 @@ validation, an attachments-folder field for imports, and a long list of fixes.
 - The app logs to a per-user folder in packaged builds and reports its real
   version, so the "Update available" banner no longer shows permanently.
 
+- **Starting the app again replaces a copy that is still running.** Before, the
+  second launch failed on the busy port and nothing seemed to happen. The new
+  copy now asks the old one to quit (older versions included) and takes its
+  place; a program that is not this app is never touched.
+
 ### Fixed
 
 - **Create mode** now applies the `date` column (and a numeric `status`); for

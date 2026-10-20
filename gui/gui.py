@@ -50,10 +50,13 @@ def _bootstrap_sys_path() -> None:
 _bootstrap_sys_path()
 
 from src.factories import ExporterFactory, ImporterFactory
-from src.updater.updater import check_for_update
-from src.utils import endpoints
+from src.updater.updater import check_for_update, get_current_version
+from src.utils import endpoints, instance
 from src.utils.common import paged_fetch
 from src.utils.logging_config import setup_logging
+
+HOST = "127.0.0.1"
+PORT = 1991
 
 DEFAULT_LOG_LEVEL = "DEBUG"
 
@@ -610,15 +613,36 @@ def shutdown() -> tuple[str, int]:
     return "Shutting down", 200
 
 
+@app.route("/ping")
+def ping() -> dict[str, str]:
+    """Identify this app, so a newer copy can tell it from other programs."""
+    return {"app": instance.APP_ID, "version": get_current_version()}
+
+
+@app.route("/quit", methods=["POST"])
+def quit_now() -> tuple[str, int]:
+    """Stop at once: a newer copy is taking over. (/shutdown waits for reloads.)"""
+    if server:
+        threading.Thread(target=server.shutdown, daemon=True).start()
+    return "Quitting", 200
+
+
 def _open_browser() -> None:
     time.sleep(1)
-    webbrowser.open("http://127.0.0.1:1991")
+    webbrowser.open(f"http://{HOST}:{PORT}")
 
 
 if __name__ == "__main__":
-    server = make_server("127.0.0.1", 1991, app)
+    if instance.port_in_use(HOST, PORT) and not instance.stop_running_instance(
+        HOST, PORT
+    ):
+        logger.error("Port %d is used by another program; cannot start.", PORT)
+        sys.exit(f"Port {PORT} is in use by another program.")
+    server = make_server(HOST, PORT, app)
     threading.Thread(target=_open_browser, daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         server.shutdown()
+    finally:
+        server.server_close()  # frees the port at once, not only at process exit

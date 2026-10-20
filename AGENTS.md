@@ -73,7 +73,7 @@ Packaged builds:
 ```
 elAPI_Plugins/
 ├── gui/                              # Flask web GUI (entry point)
-│   ├── gui.py                        # routes: /setup, /, /shutdown; runs on 127.0.0.1:1991
+│   ├── gui.py                        # routes: /setup, /, /ping, /quit, /shutdown; 127.0.0.1:1991
 │   ├── templates/                    # index.html (export/import/templates), setup.html
 │   ├── static/                       # style.css, logo
 │   └── assets/                       # app icons (.ico/.icns)

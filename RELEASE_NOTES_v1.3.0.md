@@ -25,6 +25,8 @@ Resource templates and experiment templates can now be created and updated from 
 - **Row validation.** Before a row is imported its values are checked: link columns and link-type fields must be numeric IDs of entries that exist, select fields must use one of their options, and the category must be a number. The GUI lists each skipped row with the reason, and the log keeps the full list. Only a "not found" answer counts as missing, so a network or permission error never skips a good row. The update markers `$delete_V`, `$delete_F` and `$rename$` are exempt.
 - **Attachments folder.** The import form has a new optional **Attachments folder** field. Relative paths in the `files_path` / `attachments` columns are resolved against it — or against the CSV's own folder when the CSV is given by path. Bare folder names work too. A folder that does not exist is refused before anything is created.
 
+- **Relaunching replaces the running app.** If you start elAPI Plugins while an earlier copy is still open — this version or an older one — the old copy is closed and the new one opens, instead of nothing happening. An import still running in the old copy is stopped. Another program using port 1991 is left alone.
+
 ## 🐛 Fixes
 
 **Import — values and columns**

@@ -175,6 +175,7 @@ sudo apt install ruby ruby-dev build-essential && sudo gem install --no-document
 ## Usage
 
 After launching, the GUI opens automatically in your default browser at `http://127.0.0.1:1991`.
+If a copy of the app is still running, starting it again closes the old copy and opens the new one.
 
 | Action | Description |
 |--------|-------------|

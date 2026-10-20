@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import os
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -685,3 +686,38 @@ def test_log_level_defaults_to_debug_and_honours_the_environment(
 
     monkeypatch.setenv("LOG_LEVEL", "   ")
     assert gui._resolve_log_level() == "DEBUG"
+
+
+def test_ping_identifies_the_app() -> None:
+    gui.app.testing = True
+
+    data = gui.app.test_client().get("/ping").get_json()
+
+    assert data["app"] == "elAPI_Plugins"
+    assert data["version"]
+
+
+def test_quit_stops_the_server_at_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    stopped = threading.Event()
+
+    class DummyServer:
+        def shutdown(self) -> None:
+            stopped.set()
+
+    monkeypatch.setattr(gui, "server", DummyServer())
+    gui.app.testing = True
+
+    resp = gui.app.test_client().post("/quit")
+
+    assert resp.status_code == 200
+    assert stopped.wait(timeout=2)  # no delay, unlike /shutdown
+
+
+def test_quit_is_refused_for_cross_site_requests() -> None:
+    gui.app.testing = True
+
+    resp = gui.app.test_client().post(
+        "/quit", headers={"Origin": "https://evil.example"}
+    )
+
+    assert resp.status_code == 403
