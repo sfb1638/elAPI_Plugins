@@ -58,8 +58,9 @@ validation, an attachments-folder field for imports, and a long list of fixes.
 - **The main text and the permission columns are saved when a new entry is
   created from a template.** eLabFTW ignores them in the creating request
   whenever a template is used, so a new entry kept the template's text and the
-  default permissions. They are now set with a follow-up request. Updating
-  existing entries was not affected.
+  default permissions. They are now set with a follow-up request, which is the
+  first thing done to a new entry, so a failure later on cannot leave it more
+  widely visible than the CSV asked. Updating existing entries was not affected.
 - **Create mode** now applies the `date` column (and a numeric `status`); for
   resources both used to be stored as extra fields.
 - `category_id` and `Category-ID` are recognised as the category column, and the

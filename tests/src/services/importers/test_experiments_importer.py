@@ -2814,3 +2814,62 @@ def test_experiments_importer_reads_its_own_config(
     )
 
     assert importer._find_path_col() == "my_special_files"
+
+
+def _recording_importer(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    events: list[str],
+    *,
+    fail_on: str | None = None,
+) -> exp_module.ExperimentsImporter:
+    """Importer whose every request is appended to ``events``."""
+
+    def fake_post(**kwargs: Any) -> FakeResponse:
+        events.append(f"post:{kwargs.get('sub_endpoint_name') or 'create'}")
+        return FakeResponse(headers={"Location": "http://x/experiments/7"})
+
+    def fake_patch(**kwargs: Any) -> FakeResponse:
+        keys = sorted(kwargs.get("data") or {})
+        events.append("patch:" + ",".join(keys))
+        if fail_on and fail_on in keys:
+            return FakeResponse(status_code=400, text="rejected")
+        return FakeResponse()
+
+    importer = _make_importer(
+        monkeypatch,
+        tmp_path,
+        ["title", "tags", "category", "body", "canread_base"],
+        [["t", "a", "5", "<p>x</p>", "10"]],
+        post=fake_post,
+        patch=fake_patch,
+    )
+    monkeypatch.setattr(importer, "post_extra_fields_from_row", lambda *a, **kw: None)
+    return importer
+
+
+def test_create_new_sets_permissions_before_anything_else(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The entry gets the requested visibility before it is filled in."""
+    events: list[str] = []
+    importer = _recording_importer(monkeypatch, tmp_path, events)
+
+    importer.create_new(importer.basic_df.iloc[0])
+
+    assert events[0] == "post:create"
+    assert events[1] == "patch:body,canread_base"  # right after the creation
+    assert events[2:] == ["patch:category", "post:tags", "patch:title"]
+
+
+def test_create_new_adds_nothing_when_the_permissions_are_rejected(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A rejected permission change must not be followed by title, tags or category."""
+    events: list[str] = []
+    importer = _recording_importer(monkeypatch, tmp_path, events, fail_on="canread_base")
+
+    with pytest.raises(RuntimeError, match="canread_base"):
+        importer.create_new(importer.basic_df.iloc[0])
+
+    assert events == ["post:create", "patch:body,canread_base"]

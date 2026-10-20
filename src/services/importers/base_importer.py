@@ -1491,6 +1491,21 @@ class BaseImporter(ABC):
         entity_id = str(self.get_elab_id(response))
         logger.info("Created entry %s", entity_id)
 
+        # Permissions first: the new entry starts with the account's default
+        # visibility, so give it the one the CSV asked for before anything else
+        # is added, and before a later failure can leave it as it is.
+        if fields := self._extract_entry_fields(row, template):
+            patch_resp = None
+            try:
+                patch_resp = self.endpoint.patch(endpoint_id=entity_id, data=fields)
+                patch_resp.raise_for_status()
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Failed to patch {', '.join(fields)} for entry {entity_id}: "
+                    f"{getattr(patch_resp, 'status_code', '?')} "
+                    f"{getattr(patch_resp, 'text', '')}"
+                ) from exc
+
         category_id = self.get_category_id(row) or self._default_category
         if category_id:
             patch_resp = None
@@ -1520,18 +1535,6 @@ class BaseImporter(ABC):
             except Exception as exc:
                 raise RuntimeError(
                     f"Failed to patch title for entry {entity_id}: "
-                    f"{getattr(patch_resp, 'status_code', '?')} "
-                    f"{getattr(patch_resp, 'text', '')}"
-                ) from exc
-
-        if fields := self._extract_entry_fields(row, template):
-            patch_resp = None
-            try:
-                patch_resp = self.endpoint.patch(endpoint_id=entity_id, data=fields)
-                patch_resp.raise_for_status()
-            except Exception as exc:
-                raise RuntimeError(
-                    f"Failed to patch {', '.join(fields)} for entry {entity_id}: "
                     f"{getattr(patch_resp, 'status_code', '?')} "
                     f"{getattr(patch_resp, 'text', '')}"
                 ) from exc

@@ -31,7 +31,7 @@ Resource templates and experiment templates can now be created and updated from 
 
 **Import — values and columns**
 
-- **The main text and the permission columns are saved when creating an entry from a template.** eLabFTW ignores them in its creating request whenever a template is used, so a new entry kept the template's text (not your HTML) and the default permissions. They are now set with a follow-up request. Updating existing entries was not affected.
+- **The main text and the permission columns are saved when creating an entry from a template.** eLabFTW ignores them in its creating request whenever a template is used, so a new entry kept the template's text (not your HTML) and the default permissions. They are now set with a follow-up request, the first thing done to a new entry, so a later failure cannot leave it more widely visible than the CSV asked. Updating existing entries was not affected.
 - **`date` and `status` are applied when creating entries.** For resources both used to end up as extra fields instead.
 - **Category columns.** `category_id` and `Category-ID` are recognised, and the category column is no longer also written as an extra field. A category like `12.0` is accepted; a bad one skips only its row in update mode instead of aborting the run.
 - **`Body Weight` is not the body.** A column whose name merely contains the word "body" is no longer taken for the main text when the template defines a field of that name.
