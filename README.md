@@ -144,6 +144,20 @@ python gui/gui.py
 source .build/bin/activate
 ```
 
+### Run the tests
+
+```bash
+pytest
+```
+
+Every run also measures **test coverage** (with branch tracking, configured under `[tool.coverage]` in `pyproject.toml`) and lists the files and lines the tests never reach. To make the run fail when the whole suite covers less than 80%, use:
+
+```bash
+pytest --cov-fail-under=80
+```
+
+(Use it on the full suite only; a run of a single test file covers little by design.) For a browsable report, run `pytest --cov-report=html` and open `htmlcov/index.html`.
+
 ### Use with Jupyter
 
 To run the GUI or import the package inside a Jupyter notebook, register the environment as a kernel:

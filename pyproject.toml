@@ -39,6 +39,7 @@ notebook = [
 [dependency-groups]
 test = [
     "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
 ]
 lint = [
     "mypy>=1.19.1",
@@ -70,6 +71,29 @@ package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# -------------------------
+# Pytest & coverage
+# -------------------------
+
+[tool.pytest.ini_options]
+# Every test run measures coverage; see [tool.coverage] below.
+addopts = "--cov"
+
+[tool.coverage.run]
+source = ["src", "gui"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+# No fail_under here: it would also fail a run of a single test file. The limit is
+# checked on the whole suite with `pytest --cov-fail-under=80` (about 82% today;
+# raise it as the weak modules, updater and resources importer, get more tests).
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
 
 # -------------------------
 # Ruff (Linting & Formatting)

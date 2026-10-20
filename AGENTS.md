@@ -40,7 +40,7 @@ There is also a local `.venv/` used for running tools directly. When a shell
 isn't activated, call interpreters explicitly, e.g.:
 
 ```bash
-.venv/bin/python -m pytest -q                       # run the whole test suite
+.venv/bin/python -m pytest -q                       # whole suite + coverage report
 .venv/bin/python -m pytest tests/src/services/importers -q
 .venv/bin/python -m pytest tests/src/services/importers/test_experiments_importer.py -k rename
 ```
