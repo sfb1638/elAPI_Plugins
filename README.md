@@ -116,11 +116,11 @@ The app does not stay marked as running in the Dock. It stops a few seconds afte
 
 ### Linux (Debian / Ubuntu)
 
-1. Download the latest `.deb` package from the [Releases](https://github.com/sfb1638/elAPI_Plugins/releases) page, e.g. `elapi-plugins_1.3.0_amd64.deb`.
+1. Download the latest `.deb` package from the [Releases](https://github.com/sfb1638/elAPI_Plugins/releases) page, e.g. `elapi-plugins_1.3.1_amd64.deb`.
 2. Install it:
 
    ```bash
-   sudo apt install ./elapi-plugins_1.3.0_amd64.deb
+   sudo apt install ./elapi-plugins_1.3.1_amd64.deb
    ```
 
 3. Launch **elAPI Plugins** from your application menu, or run `elapi-plugins` in a terminal.

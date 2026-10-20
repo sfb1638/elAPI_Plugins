@@ -5,6 +5,47 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] — 2026-10-20
+
+Fixes for 1.3.0, a log of skipped rows, and a macOS fix for starting the app again.
+
+### Added
+
+- **A log of skipped rows.** Every row an import leaves out is written to its own
+  file, `skipped_rows.log`, with a header naming the file and the mode, and the
+  warning in the GUI ends with a link that shows it. The warning still lists only
+  the first ten rows; the log has all of them.
+- **macOS: a click on the app icon replaces a running copy.** macOS does not start
+  a second copy of an app that is already running, so a click on the Dock icon only
+  reactivated the first one. The app bundle now starts the program through a small
+  launcher, so every click starts afresh and the new copy closes the old one. As a
+  result the app no longer shows as running in the Dock; it stops when its browser
+  tab is closed.
+
+### Fixed
+
+- **The main text and the permission columns are saved when a new entry is created
+  from a template.** eLabFTW ignores them in the creating request whenever a
+  template is used, so a new entry kept the template's text and the default
+  permissions. They are now set with a follow-up request, the first thing done to a
+  new entry, so a failure later on cannot leave it more widely visible than the CSV
+  asked. Updating existing entries was not affected.
+- The Windows build now includes `chardet`, which the CSV import needs to detect a
+  file's encoding.
+- A template or link-target lookup no longer ends the import when elapi cannot read
+  its saved settings; the lookup is skipped and the row is checked without it.
+- The version in the footer of the setup page was out of date.
+
+### Changed
+
+- Rows skipped because their ID is missing or invalid, or because the update
+  failed, are now listed in the warning and in the log; before they were only
+  counted. The warning's heading reads "Skipped N rows:".
+- A failed creation names the title of the row instead of `<unknown title>`.
+- The tests no longer depend on saved eLabFTW settings or on the operating system,
+  and a CI workflow runs them, with the lint and type checks, on Linux, Windows
+  and macOS.
+
 ## [1.3.0] — 2026-10-20
 
 The first stable release of the 1.3 series. It includes everything from
@@ -21,11 +62,6 @@ validation, an attachments-folder field for imports, and a long list of fixes.
   skipped row with the reason, and the log keeps the full list. Only a "not
   found" answer counts as missing, so a network or permission error never skips
   a row. Update markers (`$delete_V`, `$delete_F`, `$rename$`) are exempt.
-- **A log of skipped rows.** Every row an import leaves out is written to its own
-  file, `skipped_rows.log`, with a header naming the file and the mode, and the
-  warning in the GUI ends with a link that shows it. Rows skipped because their ID
-  is missing or invalid, or because the update failed, are now listed too; before
-  they were only counted. A failed creation names the title of the row.
 - **Attachments folder.** The import form has an optional "Attachments folder"
   field. Relative paths in the `files_path` / `attachments` columns are resolved
   against it, or against the CSV's own folder when the CSV is given by path.
@@ -52,20 +88,10 @@ validation, an attachments-folder field for imports, and a long list of fixes.
 - **Starting the app again replaces a copy that is still running.** Before, the
   second launch failed on the busy port and nothing seemed to happen. The new
   copy now asks the old one to quit (older versions included) and takes its
-  place; a program that is not this app is never touched. On macOS, where a
-  click on the Dock icon of a running app does not start a new copy, the app
-  bundle now starts the program through a small launcher, so every click on
-  the icon replaces the running copy. As a result the app no longer shows as
-  running in the Dock.
+  place; a program that is not this app is never touched.
 
 ### Fixed
 
-- **The main text and the permission columns are saved when a new entry is
-  created from a template.** eLabFTW ignores them in the creating request
-  whenever a template is used, so a new entry kept the template's text and the
-  default permissions. They are now set with a follow-up request, which is the
-  first thing done to a new entry, so a failure later on cannot leave it more
-  widely visible than the CSV asked. Updating existing entries was not affected.
 - **Create mode** now applies the `date` column (and a numeric `status`); for
   resources both used to be stored as extra fields.
 - `category_id` and `Category-ID` are recognised as the category column, and the
@@ -236,6 +262,7 @@ live instance — please report anything that misbehaves.
 - First stable release: export resources and experiments to `.xlsx`, import
   entries from CSV, and a local web GUI.
 
+[1.3.1]: https://github.com/sfb1638/elAPI_Plugins/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/sfb1638/elAPI_Plugins/compare/v1.2.0...v1.3.0
 [1.3.0b1]: https://github.com/sfb1638/elAPI_Plugins/compare/v1.2.0...1.3.0b1
 [1.2.0]: https://github.com/sfb1638/elAPI_Plugins/compare/v1.1.0...v1.2.0
