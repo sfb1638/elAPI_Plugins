@@ -47,7 +47,11 @@ validation, an attachments-folder field for imports, and a long list of fixes.
 - **Starting the app again replaces a copy that is still running.** Before, the
   second launch failed on the busy port and nothing seemed to happen. The new
   copy now asks the old one to quit (older versions included) and takes its
-  place; a program that is not this app is never touched.
+  place; a program that is not this app is never touched. On macOS, where a
+  click on the Dock icon of a running app does not start a new copy, the app
+  bundle now starts the program through a small launcher, so every click on
+  the icon replaces the running copy. As a result the app no longer shows as
+  running in the Dock.
 
 ### Fixed
 

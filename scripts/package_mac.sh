@@ -100,6 +100,22 @@ python -m PyInstaller "${PYI_ARGS[@]}" "$ENTRYPOINT"
 
 echo "App built: dist/${APP_NAME}.app"
 
+# macOS never starts a second copy of an app that is already running: a click on
+# its Dock icon only reactivates it, so the app cannot replace itself. Make the
+# bundle's own executable a tiny launcher that starts the real program in the
+# background and exits at once. The app then counts as not running, every click
+# starts afresh, and the new copy closes the old one (src/utils/instance.py).
+# This must happen before signing, so that the launcher is signed too.
+MACOS_DIR="dist/${APP_NAME}.app/Contents/MacOS"
+mv "$MACOS_DIR/$APP_NAME" "$MACOS_DIR/$APP_NAME.real"
+cat > "$MACOS_DIR/$APP_NAME" <<LAUNCHER
+#!/bin/sh
+DIR="\$(cd "\$(dirname "\$0")" && pwd)"
+nohup "\$DIR/${APP_NAME}.real" "\$@" >/dev/null 2>&1 &
+exit 0
+LAUNCHER
+chmod +x "$MACOS_DIR/$APP_NAME"
+
 # Optional signing to reduce Gatekeeper prompts
 if command -v codesign >/dev/null 2>&1; then
   codesign --deep --force --sign - "dist/${APP_NAME}.app" || true

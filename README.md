@@ -104,6 +104,8 @@ Follow the [elAPI installation guide](https://github.com/uhd-urz/elAPI?tab=readm
 2. Open the `.dmg` and drag **elAPI Plugins** into your Applications folder.
 3. Launch the application from Launchpad or Finder.
 
+The app does not stay marked as running in the Dock. It stops a few seconds after you close its browser tab, and opening it again (from the Dock, Launchpad or Finder) closes a copy that is still running and starts a new one.
+
 > **Note:** On first launch, macOS may block the application because it is not distributed through the App Store. Go to **System Settings → Privacy & Security**, scroll to the Security section, and click **Open Anyway**. Then relaunch the application.
 
 ### Windows
