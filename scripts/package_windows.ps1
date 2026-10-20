@@ -173,7 +173,8 @@ $pyinstaller_cmd = @(
     "--onefile",
     "--windowed",
     "--name", "$APP_NAME",
-    "--collect-all", "pandas"
+    "--collect-all", "pandas",
+    "--collect-all", "chardet"
 ) + $ICON_ARG + $DATA_ARGS + @($ENTRYPOINT)
 
 & $VenvPython $pyinstaller_cmd
